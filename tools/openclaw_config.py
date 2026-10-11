@@ -111,6 +111,8 @@ class OpenClaw:
     def configure_deepseek(self,key):
         if not key.strip() or '\n' in key or len(key)>512:raise SetupError('请填写有效的 DeepSeek API Key。')
         agents=deepseek_agents(self.get('agents',{}))
+        tools=self.get('tools',{})
+        switch_reviewer(tools)
         secrets=self.get('secrets.providers',{})
         secretfile=self.root/'data/openclaw-deepseek.json'
         secrets['planner-deepseek']={'source':'file','path':str(secretfile),'mode':'json'}
@@ -118,7 +120,7 @@ class OpenClaw:
         original=secretfile.read_bytes() if secretfile.exists() else None
         fd=os.open(secretfile,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
         with os.fdopen(fd,'w',encoding='utf-8') as f:json.dump({'key':key.strip()},f)
-        try:self.apply([{'path':'secrets.providers','value':secrets},{'path':'models.providers.deepseek','value':provider},{'path':'agents','value':agents}])
+        try:self.apply([{'path':'secrets.providers','value':secrets},{'path':'models.providers.deepseek','value':provider},{'path':'agents','value':agents},{'path':'tools','value':tools}])
         except Exception:
             if original is None:secretfile.unlink(missing_ok=True)
             else:secretfile.write_bytes(original)
@@ -139,6 +141,10 @@ def enable_tools(policy):
     policy[path]=list(dict.fromkeys([*policy.get(path,[]),*TOOLS]))
     return policy
 
+def switch_reviewer(tools):
+    reviewer=tools.get('exec',{}).get('reviewer')
+    if isinstance(reviewer,dict):reviewer['model']=MODEL
+
 def agent_values(agents):
     for name,value in agents.get('entries',{}).items():
         if isinstance(value,dict):yield name,value
@@ -149,6 +155,7 @@ def deepseek_agents(agents):
     agents=copy.deepcopy(agents)
     def change(agent):
         agent['model']={'primary':MODEL,'fallbacks':[]}
+        if isinstance(agent.get('tools'),dict):switch_reviewer(agent['tools'])
         agent.setdefault('subagents',{})['model']={'primary':MODEL,'fallbacks':[]}
         if isinstance(agent.get('heartbeat'),dict) and 'model' in agent['heartbeat']:agent['heartbeat']['model']=MODEL
         # Restrict selectable chat models; old credentials remain intact for rollback.

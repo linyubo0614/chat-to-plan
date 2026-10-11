@@ -75,6 +75,8 @@ jobs:
             python -c "from tools.openclaw_config import OpenClaw; c=OpenClaw('.'); print('DeepSeek agents configured:',c.configure_deepseek('only-a-fake-key-for-native-schema-test')); c.inspect()"
             if ($LASTEXITCODE -ne 0) { throw 'Native DeepSeek all-agent configuration failed' }
             $Updated = Get-Content $env:OPENCLAW_CONFIG_PATH -Raw | ConvertFrom-Json
+            python scripts/verify_openclaw_host.py
+            if ($LASTEXITCODE -ne 0) { throw 'Official model-tool-backend loop failed' }
             if ($Updated.agents.defaults.model.primary -ne 'deepseek/deepseek-chat') { throw 'Default model not DeepSeek' }
             $Agents = @($Updated.agents.list)
             if ($Updated.agents.entries) { $Agents = @($Updated.agents.entries.PSObject.Properties | ForEach-Object { $_.Value }) }
@@ -113,7 +115,7 @@ jobs:
             if ($Status.integrations.planner -ne 'calendar_quadrants_and_memos') { throw 'Standalone runtime wrong' }
             $Record = '{"record_id":"dddddddddddddddddddddddddddddddd","kind":"memo","title":"standalone desktop test","category":"test","body":"real executable"}'
             $Saved = Invoke-RestMethod 'http://127.0.0.1:8000/v1/planner/records' -Method POST -Headers @{Authorization="Bearer $Token"} -ContentType 'application/json' -Body $Record
-            if ($Saved.title -ne 'standalone desktop test') { throw 'Standalone real save failed' }
+            if ($Saved.record.title -ne 'standalone desktop test') { throw 'Standalone real save failed' }
           } finally { taskkill.exe /PID $Server.Id /T /F | Out-Null }
       - name: Verify extracted bundle, including Unicode and spaces
         shell: powershell

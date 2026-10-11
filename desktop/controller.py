@@ -50,7 +50,7 @@ class Controller:
                 try:status=self.api('/v1/status',timeout=1);break
                 except (OSError,ValueError):time.sleep(.5)
             else:raise SetupError('电脑服务没有启动成功。请先关闭旧 start-assistant 窗口，再重试；错误保存在 data/backend.log。')
-            if status['integrations'].get('openclaw')!='structured_tools':raise SetupError('8000 端口正在运行旧程序，请关闭旧服务窗口再启动。')
+            if status.get('version')!='0.5.0' or status['integrations'].get('openclaw')!='structured_tools':raise SetupError('8000 端口正在运行旧程序，请关闭旧服务窗口再启动。')
             self.running=True;self.emit('state','电脑服务运行中')
             try:
                 existing=self.children.get('tunnel')

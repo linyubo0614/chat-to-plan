@@ -23,7 +23,7 @@
     <string name="invalid_url">请输入 HTTPS 服务地址。调试版仅允许模拟器使用 http://10.0.2.2。</string>
     <string name="missing_token">请先填写有效的连接口令。</string>
     <string name="key_present">API Key：已配置（不会回显）</string>
-    <string name="key_missing">微信使用 GPT-6，不需要填写 DeepSeek Key</string>
+    <string name="key_missing">微信助手的 DeepSeek Key 请在电脑连接中心配置</string>
     <string name="connected_status">已连接 · 分析%1$s · 待处理 %2$d 条</string>
     <string name="enabled">开启</string>
     <string name="paused">暂停</string>

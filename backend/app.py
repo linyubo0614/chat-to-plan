@@ -55,7 +55,7 @@ def create_app(settings=None, parser=None, run_worker=True):
 
     @app.get("/v1/status")
     def status(owner=Depends(authorize)):
-        return {"deepseek_configured":runtime.public()["deepseek_key_configured"], "enabled":runtime.public()["enabled"], "wechat_configured":settings.wechat_enabled,
+        return {"version":"0.5.0","deepseek_configured":runtime.public()["deepseek_key_configured"], "enabled":runtime.public()["enabled"], "wechat_configured":settings.wechat_enabled,
                 "wechat_allowlist_configured":bool(settings.allowed_users),
                 "server_time":datetime.now(ZoneInfo(settings.timezone)).isoformat(),
                 "integrations":{"planner":"calendar_quadrants_and_memos", "hita":"compatible_bridge_unverified", "openclaw":"structured_tools", "qq":"deferred"},

@@ -71,7 +71,7 @@ export function createTools(config, context = {}) {
 
   return [{
     name: "chat_planner_record", label: "记录计划",
-    description: "用户提供需要保存的具体信息、待办、日程或课程时自动整理记录，不要求固定口令；纯闲聊、知识问答不写入。意图不清楚先追问。由当前模型整理，后端不再调用 DeepSeek。相对日期先查 chat_planner_status 的 server_time。不要猜测日期或结束时间，缺失填 clarification/question。待办日期 task_date 默认为今天；重要和紧急按用户意图分别设置，分类支持自定义。以返回状态确认保存或交付。失败重试沿用返回的 operation_id 和原始内容。修改或撤销已有记录不使用本工具。",
+    description: "Record categorized memos, daily todo tasks and HITA calendar events. 用户提供需要保存的具体信息、待办、日程或课程时自动整理记录，不要求固定口令；纯闲聊、知识问答不写入。意图不清楚先追问。由当前模型整理，后端不再调用 DeepSeek。相对日期先查 chat_planner_status 的 server_time。不要猜测日期或结束时间，缺失填 clarification/question。待办日期 task_date 默认为今天；重要和紧急按用户意图分别设置，分类支持自定义。以返回状态确认保存或交付。失败重试沿用返回的 operation_id 和原始内容。修改或撤销已有记录不使用本工具。",
     parameters: recordSchema,
     async execute(toolCallId, params, signal) {
       const operationId = params.operation_id ?? createHash("sha256")
@@ -97,7 +97,7 @@ export function createTools(config, context = {}) {
     },
   }, {
     name: "chat_planner_status", label: "查询计划状态",
-    description: "不写入。未提供 message_id 时查询服务器时间、开关和队列；提供记录工具返回的 id 时查看真实交付状态。不要把 pending/blocked/delivering 当作成功。",
+    description: "Query actual planner delivery status and current server time. 不写入。未提供 message_id 时查询服务器时间、开关和队列；提供记录工具返回的 id 时查看真实交付状态。不要把 pending/blocked/delivering 当作成功。",
     parameters: {
       type: "object", additionalProperties: false,
       properties: { message_id: { type: "string", pattern: "^[a-f0-9]{32}$" } },
@@ -116,7 +116,6 @@ export default {
   id: "chat-planner", name: "对话计划",
   register(api) {
     api.registerTool((context) => {
-      if (context.senderIsOwner === false) return null;
       return createTools(api.pluginConfig ?? {}, context);
     }, { names: ["chat_planner_record", "chat_planner_status"], optional: true });
   },

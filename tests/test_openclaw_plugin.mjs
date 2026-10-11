@@ -105,10 +105,10 @@ test("insecure/credential-bearing servers and traversal arguments fail before re
   assert.equal((await tools[0].execute("bad-id", { ...params, operation_id: "../" })).details.code, "INVALID_OPERATION_ID");
 });
 
-test("host authority and abort stop effect; owner filtering is host-supplied", async (t) => {
+test("host authority and abort stop effect while host-authorized agents receive tools", async (t) => {
   let factory;
   plugin.register({ pluginConfig: {}, registerTool: (f) => { factory = f; } });
-  assert.equal(factory({ senderIsOwner: false }), null);
+  assert.equal(factory({ senderIsOwner: false }).length, 2);
   const tools = await fixture(t, (_req, res) => { res.statusCode = 500; res.end("{}"); });
   const controller = new AbortController(); controller.abort();
   assert.equal((await tools[0].execute("aborted", params, controller.signal)).details.ok, false);

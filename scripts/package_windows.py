@@ -15,7 +15,12 @@ def main():
     output=Path(args.output);output.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(output,"w",zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(paths):
-            archive.write(path,Path("ChatPlanner")/path.relative_to(root))
+            name = str(Path("ChatPlanner")/path.relative_to(root)).replace("\\", "/")
+            content = path.read_bytes()
+            if path.suffix == ".cmd":
+                # CMD launchers must work when extracted from a Linux-built ZIP.
+                content = content.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+            archive.writestr(name, content)
     print(f"Packaged {len(paths)} program/document files; local data and credentials excluded.")
 
 

@@ -13,6 +13,14 @@
 
 登录状态只保存在这台电脑的 `data\tomato-browser`；浏览器调用官网自身的授权和同步逻辑。它不是官方承诺开放的 API，网页改变或登录过期可能使交付暂停。看到失败提示时，先检查测试记录是否已出现，再重试；同一账号的重试沿用相同记录编号。
 
+## 第 3 步没有打开浏览器或窗口闪退
+
+请下载更新后的 `chat-planner-windows.zip`。先停止已有服务及番茄连接窗口，备份 `data`，将新包中的程序文件覆盖到原文件夹，保留原有 `data` 和 `.venv`，然后重新启动服务并双击 `windows\test-tomato.cmd`。不需要重新安装手机 APK。
+
+新版启动器会显示启动阶段和退出码，即使依赖缺失或 Edge 无法启动也会停留，等待按键关闭。请把窗口中错误文字反馈给开发者，不要发送密码、连接口令、API Key 或浏览器文件。不要同时运行测试和同步窗口；它们使用同一个本地浏览器配置。
+
+如果旧版窗口仍然闪退，可以在解压目录的文件资源管理器地址栏输入 `cmd`，按回车后运行 `cmd /d /k windows\test-tomato.cmd`。这样即使旧脚本报错，窗口也会保留。只检查 Edge 能否启动而不登录或写入时，可运行 `windows\test-tomato.cmd --check-browser`。
+
 ## 再连接手机
 
 1. 服务窗口保持打开，双击 `windows\start-test-link.cmd`。如果提示未安装 cloudflared，按提示在终端执行 `winget install --id Cloudflare.cloudflared --exact`，完成后重新运行。

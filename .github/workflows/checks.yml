@@ -53,6 +53,34 @@ jobs:
             .venv/Scripts/python.exe scripts/smoke.py
             if ($LASTEXITCODE -ne 0) { throw 'Windows HTTP smoke failed' }
           } finally { taskkill.exe /PID $Server.Id /T /F | Out-Null }
+      - name: Test extracted Windows ZIP launchers and actual Edge startup
+        shell: powershell
+        run: |
+          python scripts/package_windows.py --output chat-planner-windows.zip
+          $Extract = Join-Path $env:RUNNER_TEMP 'Planner 中文 path with spaces'
+          Expand-Archive chat-planner-windows.zip -DestinationPath $Extract -Force
+          $Root = Join-Path $Extract 'ChatPlanner'
+          # Missing-environment errors must be readable and retain a nonzero exit code.
+          $env:CHAT_PLANNER_NO_PAUSE = '1'
+          Push-Location $Root
+          try {
+            $Output = cmd.exe /d /c 'windows\test-tomato.cmd --check-browser' 2>&1
+            $Result = $LASTEXITCODE
+            $Output | Write-Output
+            if ($Result -ne 1 -or ($Output -join "`n") -notmatch 'Python environment missing') { throw 'Missing-environment diagnostic failed' }
+            New-Item -ItemType Junction -Path '.venv' -Target (Join-Path $env:GITHUB_WORKSPACE '.venv') | Out-Null
+            foreach ($Launcher in @('test-tomato','start-tomato-sync')) {
+              $Output = cmd.exe /d /c "windows\$Launcher.cmd --check-browser" 2>&1
+              $Result = $LASTEXITCODE
+              $Output | Write-Output
+              if ($Result -ne 0 -or ($Output -join "`n") -notmatch 'BROWSER_START_OK') { throw "$Launcher Edge startup failed" }
+            }
+          } finally { Pop-Location; Remove-Item Env:CHAT_PLANNER_NO_PAUSE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chat-planner-windows-package
+          path: chat-planner-windows.zip
+          if-no-files-found: error
   backend:
     runs-on: ubuntu-24.04
     steps:

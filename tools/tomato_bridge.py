@@ -1,6 +1,7 @@
 """Run on the owner's Windows PC: official webpage login remains in a local browser."""
 import argparse
 import os
+import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -29,6 +30,7 @@ IDENTITY = """() => {
 def main():
     parser=argparse.ArgumentParser(description="番茄计划官网授权与新建记录验证")
     parser.add_argument("--write-test",action="store_true",help="新建一条专用测试备忘并读回核对")
+    parser.add_argument("--check-browser",action="store_true",help="仅检查浏览器启动，不访问账号、不写记录")
     parser.add_argument("--serve",action="store_true",help="测试通过后，持续处理该实例的番茄计划待写入事项")
     parser.add_argument("--server",default="http://127.0.0.1:8000")
     parser.add_argument("--browser",choices=["edge","chromium"],default="edge")
@@ -39,12 +41,30 @@ def main():
         raise SystemExit("请使用本机服务地址或 HTTPS 地址。")
     root=Path(__file__).resolve().parents[1];data=root/"data";data.mkdir(exist_ok=True,mode=0o700)
     # No browser state, cookies, JWTs, network traces or account contents are exported.
-    from playwright.sync_api import sync_playwright
+    print("正在启动 Microsoft Edge，请稍候……", flush=True)
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        raise SystemExit("浏览器依赖未安装完成。请重新运行 windows\\start-assistant.cmd，等待服务启动后重试。") from None
     with sync_playwright() as playwright:
-        context=playwright.chromium.launch_persistent_context(str(data/"tomato-browser"),headless=False,
-            channel="msedge" if args.browser=="edge" else None)
+        try:
+            context=playwright.chromium.launch_persistent_context(str(data/"tomato-browser"),headless=False,
+                channel="msedge" if args.browser=="edge" else None)
+        except Exception as error:
+            # Do not export browser profiles, cookies, or raw browser/network traces.
+            raise SystemExit(f"Edge 启动失败（{type(error).__name__}）。请确认 Microsoft Edge 已安装，并关闭其他番茄测试/同步窗口后重试。") from None
         page=context.pages[0] if context.pages else context.new_page()
-        page.goto("https://www.incmoon.com/web/login",wait_until="domcontentloaded",timeout=60000)
+        if args.check_browser:
+            page.goto("about:blank")
+            print("BROWSER_START_OK: Edge opened successfully; no account access or writes.")
+            context.close()
+            return
+        print("正在打开番茄计划官网；网络等待最多 60 秒。", flush=True)
+        try:
+            page.goto("https://www.incmoon.com/web/login",wait_until="domcontentloaded",timeout=60000)
+        except Exception as error:
+            context.close()
+            raise SystemExit(f"官网打开失败（{type(error).__name__}）。请先在普通 Edge 中检查 https://www.incmoon.com/web/login 是否能访问，再重试。") from None
         print("请在打开的番茄计划官网中登录，进入清单页后回到此窗口。密码只填写在官网。")
         input("登录完成后按回车继续：")
         user_id=page.evaluate(IDENTITY)
@@ -90,4 +110,9 @@ def main():
         context.close()
 
 
-if __name__=="__main__": main()
+if __name__=="__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("操作已停止。")
+        sys.exit(130)

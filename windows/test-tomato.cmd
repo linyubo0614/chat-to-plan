@@ -1,10 +1,20 @@
 @echo off
-chcp 65001 >nul
+setlocal
 cd /d "%~dp0.."
-if not exist ".venv\Scripts\python.exe" (
-  echo 请先运行 windows\start-assistant.cmd。
-  pause
-  exit /b 1
-)
-.venv\Scripts\python.exe -m tools.tomato_bridge --write-test
-pause
+set "PYTHONUTF8=1"
+set "PYTHONIOENCODING=utf-8"
+chcp 65001 >nul
+if exist ".venv\Scripts\python.exe" goto run
+ echo ERROR: Python environment missing. Run windows\start-assistant.cmd first.
+set "RESULT=1"
+goto finish
+:run
+echo Starting test-tomato. Please keep this window open.
+".venv\Scripts\python.exe" -u -m tools.tomato_bridge --write-test %*
+set "RESULT=%ERRORLEVEL%"
+:finish
+echo.
+echo test-tomato finished with exit code %RESULT%.
+if not "%RESULT%"=="0" echo Please send the error text above. Do not send passwords or API keys.
+if not "%CHAT_PLANNER_NO_PAUSE%"=="1" pause
+exit /b %RESULT%

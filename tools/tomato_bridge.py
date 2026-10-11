@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from .tomato_protocol import TomatoUnverified, write_verified
+from .tomato_protocol import TomatoUnverified, request, validate_snapshot, write_verified
 
 
 CALL = """async ({payload, expected_user}) => {
@@ -50,13 +50,19 @@ def main():
         user_id=page.evaluate(IDENTITY)
         if not user_id: raise SystemExit("未识别到已登录账号，请进入清单页后重试。")
         def sync(payload): return page.evaluate(CALL,{"payload":payload,"expected_user":user_id})
-        if args.write_test or args.serve:
+        if args.write_test:
             test={"kind":"memo","title":"对话计划授权验证","body":"这是你授权创建的接入测试记录，可在验证完成后手动删除。","category":"对话计划测试"}
             try:
                 write_verified(sync,user_id,"authorization-probe-v1",test)
             except Exception:
                 raise SystemExit("测试尚未确认成功；可能已提交，请先检查官网中的测试记录。没有修改或删除已有记录。") from None
             print("官网测试记录已写入并读回核对。请在手机番茄计划中刷新，核对同名记录及“对话计划测试”分类。")
+        elif args.serve:
+            try:
+                validate_snapshot(sync(request()))
+            except Exception:
+                raise SystemExit("官网授权读取未通过，请检查登录状态；尚未启动事项交付。") from None
+            print("官网授权读取已通过。每条事项仍需实际写入并读回后才会确认成功。")
         else:
             print("已识别登录状态。本次没有提交新记录；用 --write-test 进行写入验证。")
         if not args.serve:

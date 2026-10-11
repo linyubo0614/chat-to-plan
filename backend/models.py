@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -24,7 +24,10 @@ class Item(StrictModel):
     kind: Literal["memo", "todo", "schedule", "course"]
     title: str = Field(min_length=1, max_length=200)
     body: str = Field(default="", max_length=8000)
-    category: Literal["学习", "工作", "生活", "其他"] = "其他"
+    category: str = Field(default="其他",min_length=1,max_length=80)
+    important: bool = False
+    urgent: bool = False
+    task_date: date | None = None
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     due_at: datetime | None = None
@@ -55,7 +58,14 @@ class Item(StrictModel):
 
     @property
     def target(self):
-        return "hita" if self.kind in {"schedule", "course"} else "tomato"
+        return "hita" if self.kind in {"schedule", "course"} else "planner"
+
+    @field_validator("category", "title")
+    @classmethod
+    def trimmed_nonblank(cls,value):
+        if not value.strip():
+            raise ValueError("Field cannot be blank")
+        return value.strip()
 
 
 class Interpretation(StrictModel):
@@ -67,6 +77,37 @@ class Interpretation(StrictModel):
         if not self.items and not self.question:
             raise ValueError("At least one item or clarification question is required")
         return self
+
+
+class OpenClawPlan(Incoming):
+    """Already interpreted by the owner's OpenClaw model; do not parse twice."""
+    interpretation: Interpretation
+
+
+class PlannerRecord(StrictModel):
+    kind: Literal["todo","memo"]
+    title: str = Field(min_length=1,max_length=200)
+    body: str = Field(default="",max_length=8000)
+    category: str = Field(default="其他",min_length=1,max_length=80)
+    important: bool = False
+    urgent: bool = False
+    task_date: date | None = None
+    completed: bool = False
+
+    @field_validator("title","category")
+    @classmethod
+    def trimmed_nonblank(cls,value):
+        if not value.strip():
+            raise ValueError("Field cannot be blank")
+        return value.strip()
+
+
+class PlannerCreate(PlannerRecord):
+    record_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+
+
+class PlannerUpdate(PlannerRecord):
+    revision: int = Field(ge=0)
 
 
 class TaskUpdate(StrictModel):

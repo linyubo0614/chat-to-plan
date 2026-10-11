@@ -37,6 +37,6 @@ if (Test-Path $SecretFile) {
     [Array]::Clear($Plain,0,$Plain.Length)
 }
 Write-Host 'Assistant is starting on this PC. Keep this window open. Close it with Ctrl+C.'
-Write-Host 'Next: run windows\test-tomato.cmd in another window to log in and verify a test memo.'
+Write-Host 'Next: run windows\install-openclaw.cmd to connect your existing WeChat assistant.'
 & .venv\Scripts\python.exe -m uvicorn backend.app:create_app --factory --host 127.0.0.1 --port 8000 --workers 1 --no-access-log --timeout-graceful-shutdown 120
 exit $LASTEXITCODE

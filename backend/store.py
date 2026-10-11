@@ -6,6 +6,7 @@ import uuid
 from contextlib import contextmanager
 
 from .models import Interpretation
+from . import planner
 
 
 class Conflict(Exception):
@@ -15,8 +16,9 @@ class Conflict(Exception):
 class Store:
     """Durable single-owner inbox; leases recover work after a crashed process."""
 
-    def __init__(self, path):
+    def __init__(self, path, timezone="Asia/Shanghai"):
         self.path = path
+        self.timezone = timezone
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         with self.connection() as db:
             db.executescript("""
@@ -49,6 +51,7 @@ class Store:
             columns = {row[1] for row in db.execute("PRAGMA table_info(tasks)")}
             if "revision" not in columns:
                 db.execute("ALTER TABLE tasks ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
+            planner.initialize(db,timezone)
         os.chmod(path, 0o600)
 
     @contextmanager
@@ -66,6 +69,19 @@ class Store:
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             return self._ingest(db, source, external_id, owner, text, context or {})
+
+    def ingest_plan(self, external_id, owner, text, result: Interpretation):
+        # Persist the original validated interpretation for retry comparison even
+        # after a task is edited or cancelled. The message and tasks commit together.
+        context = {"interpretation": result.model_dump(mode="json")}
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row, created = self._ingest(db,"openclaw",external_id,owner,text,context)
+            if created:
+                self._complete(db,row,result)
+        if created and hasattr(self,"delivery_signal"):
+            self.delivery_signal()
+        return row["id"], created
 
     def _ingest(self, db, source, external_id, owner, text, context):
         existing = db.execute("SELECT * FROM messages WHERE source=? AND external_id=?", (source, external_id)).fetchone()
@@ -112,23 +128,29 @@ class Store:
             valid = db.execute("SELECT 1 FROM messages WHERE id=? AND status='processing' AND attempts=?", (row["id"], row["attempts"])).fetchone()
             if not valid:
                 return
-            for item in result.items:
-                status = "needs_clarification" if item.clarification else "blocked"
-                reason = item.clarification or (
-                    "等待 HITA 兼容版连接并完成后台同步；尚未写入手机。" if item.target == "hita"
-                    else "等待番茄计划授权连接端完成写入；尚未写入应用。"
-                )
-                db.execute("INSERT INTO tasks(id,message_id,target,payload,status,reason) VALUES(?,?,?,?,?,?)", (uuid.uuid4().hex,row["id"],item.target,item.model_dump_json(),status,reason))
-            db.execute("UPDATE messages SET status='parsed',question=?,lease=0,error=NULL WHERE id=?", (result.question,row["id"]))
-            if row["source"] == "wechat":
-                lines = ["已完成内容分析；尚未写入目标应用。"]
-                for item in result.items:
-                    lines.append(f"• {item.title} → {'HITA' if item.target=='hita' else '番茄计划'}" + (f"：{item.clarification}" if item.clarification else "（等待连接端写入并核对）"))
-                if result.question:
-                    lines.append(result.question)
-                self._outbox(db, row, "\n".join(lines))
+            self._complete(db,row,result)
         if hasattr(self,"delivery_signal"):
             self.delivery_signal()
+
+    def _complete(self, db, row, result):
+        for item in result.items:
+            status = "needs_clarification" if item.clarification else "written" if item.target == "planner" else "blocked"
+            reason = item.clarification or (
+                "等待 HITA 兼容版连接并完成后台同步；尚未写入手机。" if item.target == "hita"
+                else "已保存到对话计划；手机联网后可查看。"
+            )
+            key = uuid.uuid4().hex
+            db.execute("INSERT INTO tasks(id,message_id,target,payload,status,reason) VALUES(?,?,?,?,?,?)", (key,row["id"],item.target,item.model_dump_json(),status,reason))
+            if item.target == "planner" and not item.clarification:
+                planner.save_task(db,key,row["owner"],item,self.timezone)
+        db.execute("UPDATE messages SET status='parsed',question=?,lease=0,error=NULL WHERE id=?", (result.question,row["id"]))
+        if row["source"] == "wechat":
+            lines = ["已完成内容分析，记录状态如下："]
+            for item in result.items:
+                lines.append(f"• {item.title} → {'HITA' if item.target=='hita' else '对话计划'}" + (f"：{item.clarification}" if item.clarification else "（已保存，手机联网查看）" if item.target=="planner" else "（等待连接端写入并核对）"))
+            if result.question:
+                lines.append(result.question)
+            self._outbox(db, row, "\n".join(lines))
 
     def _outbox(self, db, row, text):
         context = json.loads(row["context"])
@@ -175,10 +197,12 @@ class Store:
             if cancel:
                 db.execute("UPDATE tasks SET status='cancelled',reason='已取消；未写入目标应用。',revision=revision+1 WHERE id=?",(key,))
             else:
-                status = "needs_clarification" if item.clarification else "blocked"
-                reason = item.clarification or ("等待 HITA 兼容版连接并完成后台同步；尚未写入手机。" if item.target == "hita" else "等待番茄计划授权连接端完成写入；尚未写入应用。")
+                status = "needs_clarification" if item.clarification else "written" if item.target=="planner" else "blocked"
+                reason = item.clarification or ("等待 HITA 兼容版连接并完成后台同步；尚未写入手机。" if item.target == "hita" else "已保存到对话计划；手机联网后可查看。")
                 db.execute("UPDATE tasks SET target=?,payload=?,status=?,reason=?,revision=revision+1 WHERE id=?",
                     (item.target,item.model_dump_json(),status,reason,key))
+                if item.target=="planner" and not item.clarification:
+                    planner.save_task(db,key,owner,item,self.timezone)
             if hasattr(self,"delivery_signal"):
                 self.delivery_signal()
             return row["message_id"]

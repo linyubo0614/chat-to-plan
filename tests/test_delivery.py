@@ -66,10 +66,11 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(self.client.post(f"/v1/delivery/{key}/ack",headers=self.headers,json=self.receipt(new,"reconnected-phone")).status_code,200)
 
     def test_pause_cancel_and_unsupported_fields(self):
-        self.seed();claim=self.claim("tomato").json();key=claim["task"]["id"]
+        self.seed();claim=self.claim().json();key=claim["task"]["id"]
         self.client.put("/v1/settings",headers=self.headers,json={"enabled":False})
         self.assertTrue(self.claim().json()["paused"])
         self.client.put("/v1/settings",headers=self.headers,json={"enabled":True})
+        with self.store.connection() as db: db.execute("UPDATE deliveries SET lease=0 WHERE task_id=?",(key,))
         task=self.claim().json()["task"]
         self.assertIsNotNone(task)
         # Cancelled tasks cannot enter the queue; unsupported recurrence/reminders stay unwritten.

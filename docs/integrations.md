@@ -22,20 +22,6 @@ APK 包含公开项目地址：[HIT-A/HITA_Android](https://github.com/HIT-A/HIT
 
 维护兼容版本会产生签名、数据迁移和更新延迟。当前使用固定 MIT 上游源码加本仓库补丁和 overlay，可重复构建；更新不影响原版安装，但不会自动把原版新版功能合并进兼容版。手机为 OPPO Find X9s Pro / ColorOS 16.0.10；自动化失败率没有真机测量数据，不作数值承诺。界面自动操作即使实现也无法符合完全静默要求。
 
-## 番茄计划
-
-**最新真实验证：官网读回成功，官网新增到安卓同步未通过，独立备忘录模块未实现。** 完整对照、v7.7.0 安装包校验和分析局限见[同步调查](tomato-sync-investigation.md)。本节后续段落是早期调查过程，不能代替最新状态。
-
-官网 `https://www.incmoon.com/web/login` 已成功只读访问。网页 JS `app.024799da.js` 暴露站点自身的登录、用户信息与同步接口，例如 `/tomato/account/login/mobile`、`/tomato/user/info`、`/tomato/syncData/listInfo`。
-
-网页登录态使用 Jwt、用户标识和客户端请求头。此证据不等于存在稳定的公开 API。没有用户授权登录态，未发起验证码、登录或写入，也未复制站点中的签名常量。
-
-下一步需在用户自己的授权会话中确认同步数据模型、新增记录、分类与冲突规则、过期行为及安卓同步。不能盲目提交整个同步集合，避免覆盖已有内容。没有模拟账号登录；已实现本机浏览器官网授权和增量交付，仅提交新记录与必要的新分类，所有删除列表为空，写后读取核对。尚未用真实账号验收。
-
-继续只读分析官网 JS 后，确认清单页面用 POST `/tomato/syncData/listInfo` 同时获取数据和提交变更。读取请求为 `optId: -1`，六个列表（listInfoList、listClockList、listCategoryList、listChildList、listTimeLineList、listDeleteList）均为空；写入请求携带当前 optId 和对应变更列表。网页只在 code=200 且 differenceData 为假时更新本地结果，并保存返回的 lastOptId。遇到 differenceData 不能假设写入成功，必须先重新同步并核对。此证据来自网页代码，不代表真实会话联调或稳定公开 API。
-
-用户已确认拥有账号并在 Windows 官网浏览器自行授权，没有在聊天或控制 App 内收集密码。浏览器调用官网自己的 `$api.getSyncList`，不复制认证签名常量。协议单元测试覆盖增量、分类、响应丢失去重、同步冲突和手动修改保护。后续修正：`optId=-1` 全量读取可以合法返回 `differenceData`；写入响应的该标志才按冲突处理。用户已经验证官网写入及读回，但手机同步未通过，真实服务端重试和登录失效仍待验收。
-
 ## 微信
 
 现有微信客服实现仍需真实凭据与会话联调。调查发现腾讯维护的 ClawBot / iLink 协议及 CowAgent 的 Python 实现，可优先验证扫码创建独立机器人会话的路线。详见[GitHub 项目调查](wechat-projects.md)；没有把第三方示例当作已接入微信。

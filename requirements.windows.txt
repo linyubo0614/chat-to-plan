@@ -1,3 +1,2 @@
 -r requirements.lock
 tzdata==2025.2
-playwright==1.56.0

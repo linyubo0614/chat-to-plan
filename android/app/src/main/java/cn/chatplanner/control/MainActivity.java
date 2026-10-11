@@ -178,7 +178,7 @@ public class MainActivity extends Activity {
                 JSONArray tasks = result.optJSONArray("tasks"); StringBuilder summary = new StringBuilder();
                 if (tasks != null) for (int i = 0; i < tasks.length(); i++) {
                     JSONObject task = tasks.getJSONObject(i); JSONObject item = task.getJSONObject("payload");
-                    summary.append(item.optString("title")).append(" → ").append(getString("hita".equals(task.optString("target")) ? R.string.hita : R.string.tomato))
+                    summary.append(item.optString("title")).append(" → ").append(getString("hita".equals(task.optString("target")) ? R.string.hita : R.string.planner))
                         .append("\n").append(task.optString("reason")).append("\n\n");
                 }
                 if (!result.isNull("question")) summary.append(result.optString("question"));

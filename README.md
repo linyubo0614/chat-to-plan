@@ -1,82 +1,42 @@
-# 对话计划助手
+# 对话计划
 
-用微信/QQ 对话整理备忘、待办和课程的个人助手，使用 DeepSeek 理解内容。安卓控制 App 用于连接自己的服务、开关分析、配置 API Key 和测试消息。
+在微信里随手说，OpenClaw 中已经接通的 GPT-6 整理成任务、分类备忘或 HITA 日程。安卓 App 是自己的日历和备忘软件，也能配置连接和开关。电脑使用 Windows 11，保持联网、服务在线即可。
 
-**0.3.0 已实现官网清单交付端和 HITA 兼容版后台交付端。用户已验证番茄计划官网写入，但官网手动新增也不能同步到手机；独立备忘录模块尚未接入。** 详见[同步调查](docs/tomato-sync-investigation.md)。微信和 HITA 手机联调仍待完成；最新发现的腾讯微信 ClawBot 接口与复用方案见[微信项目调查](docs/wechat-projects.md)。
+## 下载与使用
 
-| 组件 | 当前能力 | 尚需条件 |
-| --- | --- | --- |
-| Python 服务 | 认证、持久化队列、去重、租约恢复、有限重试、动态开关、加密保存 API Key | 实际部署 |
-| DeepSeek | JSON 解析、拆分、分类、时间校验、缺失信息追问 | 真实 API Key 与额度；真实模型请求尚未验证 |
-| 安卓控制 App | HTTPS 连接、密钥库保护口令、配置模型和 Key、开关、消息历史、事项修改和取消、失败重试 | 安装 APK 并连接服务器；真机 UI 待验证 |
-| 微信客服 | 加密回调验证、消息同步、白名单、结果回复 | 开通主体、客服 Secret、HTTPS 回调；真实联调待验证 |
-| 番茄计划 | 官网本地授权、分类、新建清单待办、官网读回核对和幂等重试；用户已确认官网记录出现 | 官网到安卓同步未通过；独立备忘录未实现；官网内部接口非稳定公开 API |
-| HITA 兼容版 | 常驻通知、长轮询、静默写本地课表、读回核对、重复交付去重 | 安装独立兼容包并连接；原版数据迁移和 OPPO 真机验收 |
-| QQ | 后端预留统一消息模型 | 官方机器人申请及会话能力确认；未实现 |
+[GitHub Releases 下载](https://github.com/linyubo0614/vibecoding_test_01/releases)：`chat-planner-debug.apk`、`chat-planner-windows.zip`；需要自动课表时使用 `HITA_Planner_3.0.3-planner.1.apk`。已有助手数据请保留整个 `data` 文件夹。
 
-## 本地启动
+1. 按 [Windows 步骤](docs/windows.md) 启动电脑服务并连接手机 App。
+2. 按 [OpenClaw 步骤](docs/openclaw.md) 安装工具，继续使用已经工作的微信对话和 GPT-6。
+3. 按 [HITA 说明](docs/hita.md) 开启兼容版的常驻后台连接。
 
-需要 Python 3.12。使用当前 checkout；云任务已经隔离，不需要额外 Git worktree。
+| 功能 | 当前实现 |
+| --- | --- |
+| 任务日历 | 月历选择日期、当天任务、重要/紧急四象限、完成标记、编辑日期及删除 |
+| 分类备忘 | 任意分类，例如女朋友、高数、英语；查看、搜索、编辑、删除 |
+| 微信记录 | OpenClaw 工具接收当前模型整理结果，待办和备忘在同一事务中保存；不再调用另一模型 |
+| HITA | 保留兼容版课表、原有本地编辑界面及常驻连接；单次课程、日程静默写入并读回确认 |
+| 复用与管理 | HTTPS 连接、Android Keystore 保护口令、自动处理开关、消息记录、版本冲突保护 |
+| QQ | 后续接入，当前未实现 |
+
+App 前台约3秒读取新记录；关闭 App 后微信仍可写入电脑数据库。待办和备忘的 written 表示数据库已保存；HITA 的 written 表示手机连接端报告写入并读回。提醒、重复课程展开，以及微信修改已写入 HITA 事件尚未实现；可在 HITA 内使用原有编辑界面。
+
+## 开发与部署
+
+Python 3.12、Node 24、JDK 21、Android SDK 35；HITA 构建另需 SDK 36。云任务使用当前 checkout，不需要新 Git worktree。
 
 ```bash
 bash scripts/install.sh
+.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m scripts.generate_openclaw_schema --check
+node --test tests/test_openclaw_plugin.mjs
 bash scripts/start.sh
 ```
 
-启动脚本只监听本机，首次生成连接口令并保存到忽略的 `data/api-token`，不会在日志里输出。将其私下填入 App 的“连接口令”。不要将口令、API Key、微信账号凭据发到聊天或提交 Git。
+服务默认仅监听本机，首次生成 `data/api-token`，不输出口令。手机需要可达的 HTTPS 地址；Windows 包中提供临时 Cloudflare 隧道脚本。OpenClaw 与服务在同一电脑时使用本机地址，不需要给微信提供公网回调。
 
-本地脚本不会自动读取 `.env`。可在运行环境注入变量；或者使用下方 Docker Compose 自动读取 `.env`。DeepSeek Key 也可通过控制 App 在连接后保存，不需重启服务。
+微信使用 OpenClaw 现有模型，无需 DeepSeek Key。App 消息分析测试和保留的微信客服方案可选 DeepSeek；没有 Key 会明确失败。凭据只在自己设备配置，不发送到聊天或提交 Git。数据保存在自己的 SQLite 服务；备份请停止服务后复制整个 data 文件夹。
 
-```bash
-.venv/bin/python -m unittest discover -s tests -v
-.venv/bin/python scripts/smoke.py
-```
+[API 与备份](docs/deployment.md) · [安卓构建](docs/android.md) · [验证记录](docs/validation.md) · [接入调查](docs/integrations.md)
 
-第二条命令需要服务已启动。没有 Key 时，它验证明确失败和去重，不会伪造解析结果。有 Key 时不自动发起付费测试。
-
-## 安卓 App
-
-[下载预览版 APK](https://github.com/linyubo0614/vibecoding_test_01/releases)。在最新预览版本的 Assets 中下载 `chat-planner-debug.apk`。发布流程只有在后端测试、Android 构建和静态检查全部通过后才上传安装包。
-
-源代码在 [`android/`](android/)，Android 8.0 及以上可用。只需网络权限，不申请无障碍、联系人或存储访问。
-
-安装后填写你的 HTTPS 服务地址和连接口令，点击“连接并读取设置”。填写 DeepSeek Key 并点击“保存设置”。空白 Key 保留现有配置，单独按钮用于移除 Key。功能开关保存后在服务端持久生效，关闭 App 不会停止服务。
-
-关闭开关会暂停后续分析；已开始的分析可能完成。期间接收的消息保留在队列，恢复后继续处理。当前不会自动执行修改、撤销、历史追问合并或重复课程展开。
-
-“消息与事项”页可发送消息、分页查看历史（含已接入微信的消息）、重试失败分析，并修改或取消尚未写入的事项。补充时间使用日期/时间选择器，分类可选择学习、工作、生活、其他。修改会检查记录版本；修改和取消只影响助手里的待写入记录，不会改动目标软件。
-
-该页面发送消息前加密保存消息编号和内容。如果发送结果因断网不确定，可以点击“继续发送上次未确认的消息”，沿用同一编号重试，服务端不会生成重复记录。切换服务器不会向新服务器重发旧服务器的消息。
-
-App 不是服务端：日常微信处理需要电脑或服务器保持在线。番茄计划由电脑授权浏览器连接端写入，HITA 由兼容版后台服务写入。[Windows 操作步骤](docs/windows.md)和 [HITA 兼容版说明](docs/hita.md)包含连接、迁移与低延迟限制。
-
-构建、安装和发布说明见 [安卓构建说明](docs/android.md)。
-
-## 服务部署
-
-```bash
-cp .env.example .env
-# 在本地编辑 .env，至少配置一个随机的 ASSISTANT_API_TOKEN（不少于24字符）。
-docker compose up -d --build
-```
-
-在服务器前配置 HTTPS 反向代理，转发到 `127.0.0.1:8000`。不要把 API 暴露为公共 HTTP。微信回调地址为 `https://你的域名/wechat/callback`。保持单个 Uvicorn worker；SQLite 队列适合个人部署。
-
-`/healthz` 只检查服务存活，不代表目标软件可用。`/v1/status` 返回真实配置状态和队列统计。受保护的 API 使用 `Authorization: Bearer <连接口令>`。
-
-所有实例互相独立；可为不同使用者部署独立服务和数据库，复用相同代码及 App。当前不是多人共享服务，连接口令具有这个实例的完整配置权限。
-
-部署与凭据说明见 [部署文档](docs/deployment.md)，微信开通见 [微信客服接入](docs/wechat.md)，接口证据见 [接入调查](docs/integrations.md)。
-
-## 数据与限制
-
-- 消息、解析结果、微信同步游标及回复队列保存在 SQLite；重启后保留。
-- 重复消息以来源及消息编号去重。同编号但内容不同返回冲突。
-- DeepSeek Key 用 AES-GCM 加密，数据库和加密主密钥分开保存；备份必须同时保留二者。这不能抵御服务器本身被控制。
-- App 使用 Android Keystore 保护连接口令，禁用应用备份和设置页截图，不持久保存 DeepSeek Key。
-- 未领取事项为 `blocked`，领取后为 `delivering`，目标端读回确认后为 `written`；缺少时间为 `needs_clarification`。未确认的交付不回报成功。
-- ICS 只导出时间完整、没有未解决问题的单次事件；不会猜测时长，不导出未验证的重复规则或提醒。
-- 原始消息会发送到 DeepSeek；服务器保存个人消息，备份和设备访问应由部署者管理。
-- 不依赖个人微信非官方协议，不声称能保证外部平台或安卓后台永不中断。
-
-GitHub Actions 会运行后端测试，构建控制 App 与固定源码的 HITA 兼容版，并执行 HITA 单元测试。调试包用于验证，正式分发前需自行签名和真机测试。
+GitHub Actions 检查后端、原生 Windows 安装器、安卓构建与模拟器界面、HITA 原有测试及 Room 写入。预览 APK 为调试签名，跨构建可能无法覆盖安装；不要直接卸载有未确认草稿的旧版本。模拟器验证不代替 OPPO 真机及自己的微信端验收。

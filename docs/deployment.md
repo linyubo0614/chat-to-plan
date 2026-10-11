@@ -2,7 +2,7 @@
 
 ## 运行方式
 
-Windows 11 用户直接按 [本机部署与授权验证](windows.md)运行发布附件中的脚本，无需先学习 Docker。
+Windows 11 用户直接按 [本机部署与 OpenClaw 连接](windows.md)运行发布附件中的脚本，无需先学习 Docker。
 
 Python 3.12，直接依赖在 `requirements.txt` 中声明，安装使用固定完整依赖版本的 `requirements.lock`。`bash scripts/install.sh` 创建 `.venv`；`bash scripts/start.sh` 启动一个进程和一个后台工作线程。调试用本机地址不作为公开网页预览。
 
@@ -26,7 +26,7 @@ Docker Compose 方式使用 `.env`，数据位于 `assistant-data` 持久卷。�
 
 不要将微信客服 Secret 和回调密钥混淆。回调解密必须在本地使用真实密钥。`.env` 应设置文件权限 600；如果通过云环境代理注入凭据，先验证实际请求，不要在日志打印变量值。
 
-需要的网络目的地：`api.deepseek.com`、`qyapi.weixin.qq.com`。调查番茄计划需 `www.incmoon.com`。安装用 PyPI；安卓构建用 Google Maven、Maven Central 和 Gradle 官方分发站点。
+需要的网络目的地：`api.deepseek.com`、`qyapi.weixin.qq.com`。安装用 PyPI；安卓构建用 Google Maven、Maven Central 和 Gradle 官方分发站点。
 
 ## 开关与动态配置
 
@@ -50,3 +50,17 @@ Docker Compose 方式使用 `.env`，数据位于 `assistant-data` 持久卷。�
 备份前停止服务，复制 `assistant.db` 和 `credential.key`；如使用在线 SQLite 备份工具则按其事务约定操作。不要只复制活跃主数据库而忽略 WAL。保留环境变量配置和连接口令。数据备份、密钥、APK、个人账号信息不进入 GitHub。
 
 发布云环境快照不会保留运行中的进程。后续任务必须按已保存启动说明重新启动并验证 `/healthz` 和认证状态。当前未验证新任务快照恢复。
+
+## 自有日历与分类备忘
+
+微信 OpenClaw 当前模型通过 `POST /v1/openclaw/plans` 提交已结构化内容，不需要 DeepSeek Key，不进行第二次模型调用。一次消息及其待办、备忘在同一事务中提交。课程、日程保留 HITA 租约交付。
+
+- `POST /v1/planner/records`：新增，要求客户端稳定的 32 位十六进制 `record_id`。相同编号和原始内容重试返回当前记录，不覆盖后来编辑，不复活已删除记录；内容不同返回409。
+- `GET /v1/planner/records?kind=todo&day=2026-10-12`：当天任务。`kind=memo` 支持 `category` 和 `q` 搜索；分页使用 `limit`（1–200）及 `before=next_cursor`。
+- `GET /v1/planner/calendar?month=2026-10`：每一天的总数和已完成数。
+- `GET /v1/planner/categories?kind=memo`：已有分类及记录数。
+- `GET /v1/planner/records/{id}`：单条记录。
+- `PUT /v1/planner/records/{id}`：完整 `PlannerRecord` 加当前 `revision`，原子检查版本。
+- `DELETE /v1/planner/records/{id}?revision=0`：软删除并保留去重标记。
+
+字段为 kind、title、body、category、important、urgent、task_date、completed；category 可自定义。待办未指定日期时默认服务时区的今天。备忘没有日历日期。API 均认证并限定实例 owner。手动日历编辑不受自动分析开关影响。数据存储在原 `assistant.db`，请保留整个 `data` 目录。

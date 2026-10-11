@@ -10,6 +10,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sdk",default=os.getenv("ANDROID_HOME",os.getenv("ANDROID_SDK_ROOT","")))
     parser.add_argument("--jdk",default=os.getenv("JAVA_HOME",""))
+    parser.add_argument("--instrumentation-build",action="store_true",help="Also compile the emulator test APK")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     task_env = os.environ.copy()
@@ -32,6 +33,8 @@ def main():
         options += f" -Djavax.net.ssl.trustStore={trust}"
     task_env["GRADLE_OPTS"] = options
     command = [str(root/"android/gradlew"),"--no-daemon","--console=plain","assembleDebug","lintDebug"]
+    if args.instrumentation_build:
+        command.append("assembleDebugAndroidTest")
     raise SystemExit(subprocess.run(command,cwd=root/"android",env=task_env).returncode)
 
 

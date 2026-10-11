@@ -169,7 +169,7 @@ public class InboxActivity extends Activity {
             JSONObject task = tasks.optJSONObject(i); if (task == null) continue;
             JSONObject item = task.optJSONObject("payload"); if (item == null) continue;
             text(entries, item.optString("title") + " · " + item.optString("category"), 20);
-            text(entries, item.optString("body") + "\n" + getString("hita".equals(task.optString("target")) ? R.string.hita : R.string.tomato) + " · " + state(task.optString("status")), 14);
+            text(entries, item.optString("body") + "\n" + getString("hita".equals(task.optString("target")) ? R.string.hita : R.string.planner) + " · " + state(task.optString("status")), 14);
             for (String name : new String[]{"starts_at", "ends_at", "due_at", "location", "recurrence_description"})
                 if (!item.isNull(name) && !item.optString(name).isEmpty()) text(entries, item.optString(name), 14);
             text(entries, task.optString("reason"), 14);
@@ -236,10 +236,7 @@ public class InboxActivity extends Activity {
         text(form, getString(R.string.edit_help),14);
         EditText title = field(form,getString(R.string.record_title),current.optString("title"),false);
         EditText body = field(form,getString(R.string.record_body),current.optString("body"),true);
-        Spinner category = new Spinner(this); String[] categories = {"学习","工作","生活","其他"};
-        category.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,categories));
-        for (int i=0;i<categories.length;i++) if (categories[i].equals(current.optString("category"))) category.setSelection(i);
-        text(form,getString(R.string.record_category),14); form.addView(category);
+        EditText category = field(form,getString(R.string.record_category),current.optString("category"),false);
         EditText start = timeField(form,getString(R.string.record_start),current.isNull("starts_at") ? "" : current.optString("starts_at"));
         EditText end = timeField(form,getString(R.string.record_end),current.isNull("ends_at") ? "" : current.optString("ends_at"));
         EditText due = timeField(form,getString(R.string.record_due),current.isNull("due_at") ? "" : current.optString("due_at"));
@@ -249,7 +246,7 @@ public class InboxActivity extends Activity {
             .setPositiveButton(R.string.save_record,(d,w) -> {
                 try {
                     JSONObject item = new JSONObject(current.toString()).put("title",title.getText().toString().trim()).put("body",body.getText().toString())
-                        .put("category",category.getSelectedItem().toString()).put("location",location.getText().toString().trim());
+                        .put("category",category.getText().toString().trim()).put("location",location.getText().toString().trim());
                     String[] names = {"starts_at","ends_at","due_at","clarification"};
                     EditText[] fields = {start,end,due,clarification};
                     for (int i=0;i<names.length;i++) { String value=i<3 ? (String)fields[i].getTag() : fields[i].getText().toString().trim(); item.put(names[i],value.isEmpty() ? JSONObject.NULL : value); }

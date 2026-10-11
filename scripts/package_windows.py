@@ -12,6 +12,10 @@ def main():
     paths=[root/name for name in ("requirements.lock","requirements.windows.txt","README.md")]
     for name in ("backend","tools","windows","docs"):
         paths.extend(p for p in (root/name).rglob("*") if p.is_file() and p.suffix in {".py",".cmd",".ps1",".md"} and "__pycache__" not in p.parts)
+    # Explicit plugin files: never include dependencies, tests or local state.
+    paths.extend(root/"openclaw"/name for name in (
+        "package.json","openclaw.plugin.json","index.mjs","record.schema.json",
+        "skills/chat-planner/SKILL.md"))
     output=Path(args.output);output.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(output,"w",zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(paths):

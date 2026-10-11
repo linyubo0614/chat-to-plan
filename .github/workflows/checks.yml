@@ -17,6 +17,9 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: requirements.windows.txt
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
       - run: python -m pip install -r requirements.windows.txt
       - name: Validate PowerShell syntax
         shell: powershell
@@ -27,6 +30,8 @@ jobs:
             if ($ParseErrors.Count) { throw $ParseErrors }
           }
       - run: python -m unittest discover -s tests -v
+      - run: python -m scripts.generate_openclaw_schema --check
+      - run: node --test tests/test_openclaw_plugin.mjs
       - name: Verify Windows-account credential encryption
         shell: powershell
         run: |
@@ -52,30 +57,32 @@ jobs:
             if (-not $Ready) { throw 'Windows service did not become ready' }
             .venv/Scripts/python.exe scripts/smoke.py
             if ($LASTEXITCODE -ne 0) { throw 'Windows HTTP smoke failed' }
+            $HostRoot = Join-Path $env:RUNNER_TEMP 'OpenClaw host test'
+            npm.cmd install --prefix $HostRoot --ignore-scripts --no-audit --no-fund openclaw@2026.10.1
+            if ($LASTEXITCODE -ne 0) { throw 'Pinned OpenClaw installation failed' }
+            $env:PATH = (Join-Path $HostRoot 'node_modules/.bin') + ';' + $env:PATH
+            $env:OPENCLAW_STATE_DIR = Join-Path $HostRoot 'state'
+            $env:OPENCLAW_CONFIG_PATH = Join-Path $env:OPENCLAW_STATE_DIR 'openclaw.json'
+            New-Item -ItemType Directory -Path $env:OPENCLAW_STATE_DIR -Force | Out-Null
+            $Seed = '{"agents":{"defaults":{"model":{"primary":"openai/gpt-6"}}},"tools":{"alsoAllow":["existing-tool"]}}'
+            [IO.File]::WriteAllText($env:OPENCLAW_CONFIG_PATH,$Seed,(New-Object Text.UTF8Encoding($false)))
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File windows/install-openclaw.ps1
+            if ($LASTEXITCODE -ne 0) { throw 'Native OpenClaw installer failed' }
+            $Config = Get-Content $env:OPENCLAW_CONFIG_PATH -Raw | ConvertFrom-Json
+            if ($Config.agents.defaults.model.primary -ne 'openai/gpt-6') { throw 'Existing model changed' }
+            if ($Config.tools.alsoAllow -notcontains 'existing-tool') { throw 'Existing tool permission removed' }
+            if ($Config.tools.alsoAllow -notcontains 'chat_planner_record') { throw 'Planner tools missing' }
           } finally { taskkill.exe /PID $Server.Id /T /F | Out-Null }
-      - name: Test extracted Windows ZIP launchers and actual Edge startup
+      - name: Verify extracted bundle, including Unicode and spaces
         shell: powershell
         run: |
           python scripts/package_windows.py --output chat-planner-windows.zip
           $Extract = Join-Path $env:RUNNER_TEMP 'Planner 中文 path with spaces'
           Expand-Archive chat-planner-windows.zip -DestinationPath $Extract -Force
           $Root = Join-Path $Extract 'ChatPlanner'
-          # Missing-environment errors must be readable and retain a nonzero exit code.
-          $env:CHAT_PLANNER_NO_PAUSE = '1'
-          Push-Location $Root
-          try {
-            $Output = cmd.exe /d /c 'windows\test-tomato.cmd --check-browser' 2>&1
-            $Result = $LASTEXITCODE
-            $Output | Write-Output
-            if ($Result -ne 1 -or ($Output -join "`n") -notmatch 'Python environment missing') { throw 'Missing-environment diagnostic failed' }
-            New-Item -ItemType Junction -Path '.venv' -Target (Join-Path $env:GITHUB_WORKSPACE '.venv') | Out-Null
-            foreach ($Launcher in @('test-tomato','start-tomato-sync')) {
-              $Output = cmd.exe /d /c "windows\$Launcher.cmd --check-browser" 2>&1
-              $Result = $LASTEXITCODE
-              $Output | Write-Output
-              if ($Result -ne 0 -or ($Output -join "`n") -notmatch 'BROWSER_START_OK') { throw "$Launcher Edge startup failed" }
-            }
-          } finally { Pop-Location; Remove-Item Env:CHAT_PLANNER_NO_PAUSE }
+          if (-not (Test-Path (Join-Path $Root 'openclaw/record.schema.json'))) { throw 'Plugin missing from ZIP' }
+          if (-not (Test-Path (Join-Path $Root 'windows/install-openclaw.cmd'))) { throw 'Installer missing from ZIP' }
+          if (Test-Path (Join-Path $Root 'data')) { throw 'Private data packaged' }
       - uses: actions/upload-artifact@v4
         with:
           name: chat-planner-windows-package
@@ -112,6 +119,64 @@ jobs:
           name: chat-planner-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+  planner-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: pip install -r requirements.lock
+      - name: Start real test backend and seed a structured WeChat plan
+        env:
+          ASSISTANT_API_TOKEN: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          ASSISTANT_DB: /tmp/planner-ui.db
+        run: |
+          python -m uvicorn backend.app:create_app --factory --host 0.0.0.0 --port 8000 --no-access-log > /tmp/planner-ui.log 2>&1 &
+          python - <<'PY'
+          import time, httpx
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          for attempt in range(30):
+              try:
+                  httpx.get('http://127.0.0.1:8000/healthz').raise_for_status();break
+              except httpx.HTTPError: time.sleep(1)
+          day=datetime.now(ZoneInfo('Asia/Shanghai')).date().isoformat()
+          result=httpx.post('http://127.0.0.1:8000/v1/openclaw/plans',headers={'Authorization':'Bearer '+'a'*32},json={
+              'message_id':'ui-wechat-example','text':'今天交作业；她喜欢茉莉花茶',
+              'interpretation':{'items':[
+                  {'kind':'todo','title':'CI 微信待办','task_date':day,'important':True,'urgent':True,'category':'高数'},
+                  {'kind':'memo','title':'喜欢的茶','body':'茉莉花茶','category':'女朋友'}]}})
+          result.raise_for_status()
+          assert all(t['status']=='written' for t in result.json()['message']['tasks'])
+          PY
+      - run: sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: cd android && ./gradlew --no-daemon --max-workers=2 connectedDebugAndroidTest
+      - name: Retrieve app previews containing only CI test data
+        if: always()
+        run: |
+          mkdir -p planner-previews
+          adb pull /sdcard/Android/data/cn.chatplanner.control/files/. planner-previews/ || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: planner-ui-results-and-previews
+          path: |
+            android/app/build/outputs/androidTest-results/connected/
+            planner-previews/
+          if-no-files-found: warn
   hita:
     runs-on: ubuntu-24.04
     timeout-minutes: 40

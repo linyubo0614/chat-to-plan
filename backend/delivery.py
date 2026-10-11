@@ -45,7 +45,7 @@ class Delivery:
         now = time.time()
         with self.store.connection() as db:
             db.execute("BEGIN IMMEDIATE")
-            rows = db.execute("""SELECT t.*,d.lease,d.attempts FROM tasks t
+            rows = db.execute("""SELECT t.*,m.source AS message_source,d.lease,d.attempts FROM tasks t
                 JOIN messages m ON t.message_id=m.id LEFT JOIN deliveries d ON d.task_id=t.id
                 WHERE m.owner=? AND t.target=? AND t.status IN ('blocked','delivering')
                 AND (d.lease IS NULL OR d.lease<?) ORDER BY t.rowid""",(owner,target,now)).fetchall()
@@ -95,7 +95,7 @@ class Delivery:
                 title = json.loads(message["payload"])["title"]
                 reply_id = "delivery-"+key
                 payload = {"touser":context["external_userid"],"open_kfid":context["open_kfid"],"msgid":reply_id,
-                    "msgtype":"text","text":{"content":f"已收到目标端写入并核对的确认：{title} → {'HITA兼容版' if message['target']=='hita' else '番茄计划'}。"[:1800]}}
+                    "msgtype":"text","text":{"content":f"已收到目标端写入并核对的确认：{title} → HITA兼容版。"[:1800]}}
                 db.execute("INSERT OR IGNORE INTO outbox(id,payload) VALUES(?,?)",(reply_id,json.dumps(payload,ensure_ascii=False)))
             return {"status":"written","duplicate":False}
 

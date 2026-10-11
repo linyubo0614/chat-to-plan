@@ -1,5 +1,9 @@
 import hmac
 from contextlib import asynccontextmanager
+from datetime import datetime
+from datetime import date
+from typing import Literal
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -7,7 +11,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from .config import Settings
 from .delivery import Delivery
 from .calendar import export_ics
-from .models import Incoming, Item, TaskUpdate, DeliveryClaim, DeliveryReceipt
+from .models import Incoming, Item, TaskUpdate, DeliveryClaim, DeliveryReceipt, OpenClawPlan, PlannerCreate, PlannerUpdate
+from .planner import Planner
 from .parser import DeepSeekParser
 from .runtime import Runtime, SettingsUpdate
 from .store import Conflict, Store
@@ -17,7 +22,8 @@ from .worker import Worker
 
 def create_app(settings=None, parser=None, run_worker=True):
     settings = settings or Settings.from_env()
-    store = Store(settings.db_path)
+    store = Store(settings.db_path,settings.timezone)
+    planner = Planner(store)
     delivery = Delivery(store)
     runtime = Runtime(store,settings)
     wechat = WeChatAPI(settings) if settings.wechat_enabled else None
@@ -31,7 +37,7 @@ def create_app(settings=None, parser=None, run_worker=True):
         yield
         worker.stop()
 
-    app = FastAPI(title="对话计划助手", version="0.3.0", lifespan=lifespan,
+    app = FastAPI(title="对话计划助手", version="0.4.0", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.store, app.state.worker, app.state.runtime = store, worker, runtime
     bearer = HTTPBearer(auto_error=False)
@@ -51,7 +57,8 @@ def create_app(settings=None, parser=None, run_worker=True):
     def status(owner=Depends(authorize)):
         return {"deepseek_configured":runtime.public()["deepseek_key_configured"], "enabled":runtime.public()["enabled"], "wechat_configured":settings.wechat_enabled,
                 "wechat_allowlist_configured":bool(settings.allowed_users),
-                "integrations":{"tomato":"local_browser_bridge_unverified", "hita":"compatible_bridge_unverified", "qq":"deferred"},
+                "server_time":datetime.now(ZoneInfo(settings.timezone)).isoformat(),
+                "integrations":{"planner":"calendar_quadrants_and_memos", "hita":"compatible_bridge_unverified", "openclaw":"structured_tools", "qq":"deferred"},
                 "queues":store.counts()}
 
     @app.get("/v1/settings")
@@ -72,6 +79,73 @@ def create_app(settings=None, parser=None, run_worker=True):
             raise HTTPException(409, str(exc)) from exc
         return {"id":row["id"], "status":row["status"], "duplicate":not created}
 
+    @app.post("/v1/openclaw/plans", status_code=201)
+    def submit_plan(plan: OpenClawPlan,response: Response,owner=Depends(authorize)):
+        if not runtime.public()["enabled"]:
+            raise HTTPException(423,"Assistant is paused; no plan was accepted")
+        try:
+            key,created = store.ingest_plan(plan.message_id,owner,plan.text,plan.interpretation)
+        except Conflict as exc:
+            raise HTTPException(409,str(exc)) from exc
+        if not created:
+            response.status_code = 200
+        return {"id":key,"duplicate":not created,"message":store.get_message(key,owner),
+                "delivery_notice":"备忘和待办已保存到对话计划，手机联网后可查看；HITA 须等待目标端写入并读回确认。"}
+
+    @app.post("/v1/planner/records",status_code=201)
+    def create_record(body: PlannerCreate,response: Response,owner=Depends(authorize)):
+        try:
+            result = planner.create(owner,body)
+        except Conflict as exc:
+            raise HTTPException(409,str(exc)) from exc
+        if result["duplicate"]:
+            response.status_code=200
+        return result
+
+    @app.get("/v1/planner/records")
+    def records(kind: Literal["todo","memo"],day: date | None = None,
+                category: str | None = Query(default=None,max_length=80),q: str = Query(default="",max_length=200),
+                limit: int = Query(default=50,ge=1,le=200),before: int | None = Query(default=None,ge=1),owner=Depends(authorize)):
+        return planner.list(owner,kind,day,category,q,limit,before)
+
+    @app.get("/v1/planner/calendar")
+    def calendar_overview(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),owner=Depends(authorize)):
+        try:
+            return planner.calendar(owner,month)
+        except ValueError as exc:
+            raise HTTPException(422,"Invalid month") from exc
+
+    @app.get("/v1/planner/categories")
+    def categories(kind: Literal["todo","memo"]="memo",owner=Depends(authorize)):
+        return planner.categories(owner,kind)
+
+    @app.get("/v1/planner/records/{key}")
+    def get_record(key: str,owner=Depends(authorize)):
+        row=planner.get(key,owner)
+        if row is None:
+            raise HTTPException(404,"Record not found")
+        return {"record":row}
+
+    @app.put("/v1/planner/records/{key}")
+    def update_record(key: str,body: PlannerUpdate,owner=Depends(authorize)):
+        try:
+            result=planner.update(key,owner,body.revision,body)
+        except Conflict as exc:
+            raise HTTPException(409,str(exc)) from exc
+        if result is None:
+            raise HTTPException(404,"Record not found")
+        return result
+
+    @app.delete("/v1/planner/records/{key}")
+    def delete_record(key: str,revision: int = Query(ge=0),owner=Depends(authorize)):
+        try:
+            result=planner.update(key,owner,revision,delete=True)
+        except Conflict as exc:
+            raise HTTPException(409,str(exc)) from exc
+        if result is None:
+            raise HTTPException(404,"Record not found")
+        return result
+
     @app.get("/v1/messages/{message_id}")
     def result(message_id: str, owner=Depends(authorize)):
         row = store.get_message(message_id, owner)
@@ -85,7 +159,7 @@ def create_app(settings=None, parser=None, run_worker=True):
 
     @app.post("/v1/delivery/{target}/claim")
     def claim_delivery(target: str, body: DeliveryClaim,wait: int = Query(default=0,ge=0,le=25),owner=Depends(authorize)):
-        if target not in {"hita","tomato"}:
+        if target != "hita":
             raise HTTPException(404,"Unknown target")
         if not runtime.public()["enabled"]:
             return {"task":None,"paused":True}
@@ -99,6 +173,7 @@ def create_app(settings=None, parser=None, run_worker=True):
             raise HTTPException(409,str(exc)) from exc
         if result is None:
             raise HTTPException(404,"Delivery not found")
+        delivery.signal()
         return result
 
     @app.post("/v1/delivery/{task_id}/retry")

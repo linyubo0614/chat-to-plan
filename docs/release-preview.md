@@ -1,18 +1,11 @@
-对话计划 0.3.0 / HITA 3.0.3-planner.1 联调预览。
+对话计划 0.4.0：自己的任务日历和分类备忘，复用微信 OpenClaw / GPT-6，保留 HITA 兼容版。
 
-这次增加实际交付端：
+- 安卓主页改为月历和四色象限，可编辑日期、重要/紧急、完成状态及删除。
+- 分类备忘支持任意分类、搜索、编辑和删除。
+- 新增 OpenClaw 工具与 Windows 安装器，现有模型直接整理保存，无需 DeepSeek Key。
+- 移除旧网页适配器和登录测试；助手旧队列中的待办/备忘迁到自有数据库，不读取其他软件数据。
+- HITA 后台写入、读回确认、常驻通知和本地编辑功能保留。
 
-- 番茄计划：Windows 本地官网浏览器授权，新增分类和备忘/待办，写入后读回核对。
-- HITA 兼容版：用户开启常驻通知，长轮询接收任务，静默事务写入本地“对话计划”课表，读回后确认。
-- 服务端：交付租约、断线恢复、重复写入保护和结果确认；控制 App 显示交付与写入状态。
-- Windows 11：启动服务、官网测试写入、持续同步、私下配置 DeepSeek/微信，以及临时 HTTPS 联调脚本。
+下载 `chat-planner-debug.apk` 和 `chat-planner-windows.zip`，更新电脑程序时保留整个 data 文件夹。启动 `windows\start-assistant.cmd`，运行 `windows\install-openclaw.cmd`，成功后按原方式重启 OpenClaw。[Windows 操作步骤](https://github.com/linyubo0614/vibecoding_test_01/blob/main/docs/windows.md)。已有 HITA 兼容版连接可继续使用，无需为新日历重装。
 
-下载 `chat-planner-windows.zip` 解压，先按 [Windows 操作步骤](https://github.com/linyubo0614/vibecoding_test_01/blob/main/docs/windows.md)运行 `windows/start-assistant.cmd` 和 `windows/test-tomato.cmd`，在自己电脑的官网登录并核对测试记录。不要把密码或 Key 发到聊天。
-
-手机安装 `chat-planner-debug.apk`（控制端）及 `HITA_Planner_3.0.3-planner.1.apk`（独立兼容版）。保留原版 HITA，不自动迁移其私有数据；使用已有导出/导入功能前先备份并核对。
-
-秒级是在线交付目标，25 秒长轮询可在新任务产生时立即返回，不是 25 秒的定时轮询。尚未测量真实 DeepSeek、微信、官网手机同步和 OPPO 端到端延迟；Windows 原生脚本和真机仍需本地验收。微信主体/客服和固定 HTTPS 回调仍需要用户开通配置，QQ 延后。
-
-仅支持信息完整的单次事项。重复规则、指定提醒和已写入记录的修改/撤销尚未接入。官网接口可能随网站更新变化；失败不会被标记为成功。
-
-附件从本次 CI 构建和检查产物发布，提供 `SHA256SUMS`。这些是调试签名预览包，固定签名尚未配置，跨构建机器可能不能覆盖安装；卸载会清除对应 App 的本地数据，HITA 数据必须先备份。
+发布只复用本提交通过全部检查的构建。模拟器验证不代替真实微信和 OPPO 联调。暂不支持离线新建同步、重复课程、指定提醒或微信修改已有 HITA 事件；事件可在 HITA 内编辑。调试签名可能变化，安装冲突时先保留未确认草稿，服务器日历和备忘不随 App 卸载删除。

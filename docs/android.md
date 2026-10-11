@@ -1,0 +1,35 @@
+# 安卓控制 App
+
+源代码位于 `android/`，原生 Java UI，没有第三方 Android 运行时依赖。需要 JDK 17 或 21、Android SDK Platform 35、Build Tools 35.0.0 和 Gradle 8.11.1。
+
+在受限云环境也可从仓库根目录运行 `python3 scripts/build_android.py --sdk <SDK路径> --jdk <JDK路径>`，它使用已提交的 Gradle wrapper、持久缓存和系统 Java 信任库处理现有代理，不关闭 TLS 验证。通过 SDK Manager 安装平台和接受标准 SDK 许可。
+
+```bash
+cd android
+./gradlew --no-daemon assembleDebug lintDebug
+```
+
+调试 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 也会上传 `chat-planner-debug-apk` 构建产物，APK 不作为源码提交。
+
+真机输入自己的 HTTPS 服务地址；调试版在安卓模拟器内可使用 `http://10.0.2.2:8000` 访问宿主机服务。仅此模拟器域名允许 HTTP，正式版只允许 HTTPS；请勿为了连接失败而全局关闭 TLS 校验。
+
+功能：
+
+- 保存服务地址、使用安卓密钥库保护连接口令。
+- 读取和保存服务器处理开关；操作不依赖 App 持续运行。
+- 配置/移除 DeepSeek Key、选择模型；Key 不在设备本地持久保存。
+- 查看队列状态、发送测试消息并显示结果或明确失败。
+- API Key 不回显，敏感界面禁截图，禁止应用备份。
+
+连接口令具有完整的实例管理权限。更换服务器时必须重新输入口令，App 不会把旧口令自动发送给新地址。首次连接要求输入口令，错误或未验证的地址不会覆盖保存的连接。
+
+目前未接入后台课程桥接，也不申请无障碍权限。App 设置中显示各软件的真实接入状态。功能开关必须点击“保存设置”才会生效。
+
+正式发布前需要：
+
+1. 在实际手机测试布局、键盘、连接、密钥持久化、重启、API 设置和暂停/恢复。
+2. 使用自己的 release keystore 签名，安全保存签名密钥，不提交 Git。
+3. 配置服务端 HTTPS、连接口令轮换及备份。
+4. 完成真实微信收发和目标应用写入验收。
+
+调试包用于验证，不代表已完成签名发布、真机兼容或消息入口开通。

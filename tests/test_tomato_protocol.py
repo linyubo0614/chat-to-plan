@@ -58,6 +58,24 @@ class TomatoTests(unittest.TestCase):
         self.site.data["listInfoList"][1]["notes"]="用户修改后的内容"
         with self.assertRaises(TomatoUnverified): write_verified(self.site.sync,"account-id","task-id",self.item)
         self.assertEqual(self.site.data["listInfoList"][1]["notes"],"用户修改后的内容")
+    def test_full_read_difference_flag_is_not_a_write_conflict(self):
+        stages=[]
+        def sync(payload):
+            reply=self.site.sync(payload)
+            if payload["optId"] == -1:
+                reply["data"]["differenceData"]=True
+            return reply
+        key=write_verified(sync,"account-id","task-id",self.item,progress=stages.append)
+        self.assertEqual(stages,["read","write","readback"])
+        self.assertEqual(len(self.site.writes),1)
+        self.assertEqual(write_verified(sync,"account-id","task-id",self.item),key)
+        self.assertEqual(len(self.site.writes),1)
+        self.site.conflict=True
+        with self.assertRaises(TomatoUnverified) as error:
+            write_verified(sync,"account-id","another-task",self.item)
+        self.assertEqual(error.exception.code,"sync_conflict")
+        self.assertEqual(len(self.site.data["listInfoList"]),2)
+
     def test_legacy_id_is_not_duplicated_or_resurrected(self):
         legacy=str(uuid.uuid5(uuid.NAMESPACE_URL,"chat-planner:tomato:account-id:task-id"))
         record,categories=prepare_record(self.site.data,"account-id","task-id",self.item)

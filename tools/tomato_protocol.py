@@ -31,8 +31,8 @@ def request(opt_id=-1, records=None, categories=None):
 def validate_snapshot(reply):
     check_reply(reply)
     data = reply["data"]
-    if data.get("differenceData"):
-        raise TomatoUnverified("sync_conflict")
+    # optId=-1 full reads can legitimately carry differenceData. The website
+    # accepts the full snapshot here; only delta write replies use it as a conflict.
     if not isinstance(data.get("lastOptId"),int) or not all(isinstance(data.get(key),list) for key in LISTS[:-1]):
         raise TomatoUnverified("website_protocol_changed")
     return data

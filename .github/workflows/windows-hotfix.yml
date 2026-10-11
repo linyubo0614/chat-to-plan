@@ -47,5 +47,5 @@ jobs:
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" chat-planner-windows.zip SHA256SUMS --clobber
           else
-            gh release create "$RELEASE_TAG" chat-planner-windows.zip SHA256SUMS --verify-tag --prerelease --title 'Windows 0.3.0.1: browser launcher fix' --notes-file docs/release-windows-hotfix.md
+            gh release create "$RELEASE_TAG" chat-planner-windows.zip SHA256SUMS --verify-tag --prerelease --title "Windows ${RELEASE_TAG#windows-v}: Tomato bridge fix" --notes-file docs/release-windows-hotfix.md
           fi

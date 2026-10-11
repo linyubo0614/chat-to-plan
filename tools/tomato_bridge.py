@@ -11,13 +11,18 @@ from .tomato_protocol import TomatoUnverified, request, validate_snapshot, write
 
 
 CALL = """async ({payload, expected_user}) => {
-    if (location.origin !== 'https://www.incmoon.com') throw new Error('Unexpected origin');
+    if (location.origin !== 'https://www.incmoon.com') return {bridge_error:'unexpected_origin'};
     const app=document.body.firstElementChild?.__vue__;
-    if (!app?.$api?.getSyncList) throw new Error('Website changed');
+    if (!app?.$api?.getSyncList) return {bridge_error:'website_changed'};
     if (app.$store?.state?.userId !== expected_user || localStorage.getItem('userId') !== expected_user)
-        throw new Error('Account changed');
-    const response=await app.$api.getSyncList(payload);
-    return response.data;
+        return {bridge_error:'account_changed'};
+    try {
+        const response=await app.$api.getSyncList(payload);
+        return response?.data ?? {bridge_error:'response_missing'};
+    } catch (error) {
+        const status=error?.response?.status ?? error?.status;
+        return {bridge_error:'network_request_failed', http_status:Number.isInteger(status) ? status : null};
+    }
 }"""
 IDENTITY = """() => {
     if (location.origin !== 'https://www.incmoon.com') return null;
@@ -25,6 +30,42 @@ IDENTITY = """() => {
     const id=app?.$store?.state?.userId;
     return id && id === localStorage.getItem('userId') ? id : null;
 }"""
+
+
+FAILURES = {
+    "unexpected_origin":"当前页面不是番茄计划官网",
+    "website_changed":"官网同步入口已改变",
+    "account_changed":"登录账号已切换",
+    "response_missing":"官网没有返回同步结果",
+    "network_request_failed":"官网同步请求失败",
+    "session_or_response_unavailable":"官网未接受请求或登录授权失效",
+    "website_protocol_changed":"官网返回的数据格式与预期不一致",
+    "sync_conflict":"官网数据发生同步冲突，请刷新官网后重试",
+    "ambiguous_category":"存在多个同名分类，暂不自动选择",
+    "target_record_differs":"测试记录已被修改，未覆盖",
+    "target_record_deleted_or_conflicting":"测试记录已被删除或存在冲突，未覆盖",
+    "category_readback_failed":"分类读回未能核对",
+    "record_not_found_after_write":"提交后没有读回测试记录",
+    "unsupported_item":"该事项暂不支持自动写入",
+}
+
+
+def browser_sync(page, payload, user_id):
+    reply=page.evaluate(CALL,{"payload":payload,"expected_user":user_id})
+    if isinstance(reply,dict) and "bridge_error" in reply:
+        code=reply["bridge_error"]
+        raise TomatoUnverified(code if code in FAILURES else "website_protocol_changed",reply.get("http_status"))
+    return reply
+
+
+def failure_text(error, stage):
+    # Emit only locally defined labels and numeric status codes, never raw exceptions.
+    stages={"read":"读取现有清单", "write":"提交测试记录", "readback":"读回核对"}
+    label=stages.get(stage,"浏览器调用")
+    detail=FAILURES.get(error.code,"同步结果未确认") if isinstance(error,TomatoUnverified) else "浏览器或本地处理失败（"+type(error).__name__+"）"
+    status=f"；返回码 {error.response_code}" if isinstance(error,TomatoUnverified) and error.response_code is not None else ""
+    attempt="尚未提交测试记录。" if stage=="read" else "可能已提交，请检查官网中的测试记录后再重试。"
+    return f"{label}失败：{detail}{status}。{attempt}没有修改或删除已有记录。"
 
 
 def main():
@@ -69,13 +110,18 @@ def main():
         input("登录完成后按回车继续：")
         user_id=page.evaluate(IDENTITY)
         if not user_id: raise SystemExit("未识别到已登录账号，请进入清单页后重试。")
-        def sync(payload): return page.evaluate(CALL,{"payload":payload,"expected_user":user_id})
+        def sync(payload): return browser_sync(page,payload,user_id)
         if args.write_test:
             test={"kind":"memo","title":"对话计划授权验证","body":"这是你授权创建的接入测试记录，可在验证完成后手动删除。","category":"对话计划测试"}
+            stage="read"
+            def progress(value):
+                nonlocal stage
+                stage=value
+                print({"read":"正在读取现有清单……", "write":"正在提交测试记录……", "readback":"正在读回核对……"}[value],flush=True)
             try:
-                write_verified(sync,user_id,"authorization-probe-v1",test)
-            except Exception:
-                raise SystemExit("测试尚未确认成功；可能已提交，请先检查官网中的测试记录。没有修改或删除已有记录。") from None
+                write_verified(sync,user_id,"authorization-probe-v1",test,progress=progress)
+            except Exception as error:
+                raise SystemExit(failure_text(error,stage)) from None
             print("官网测试记录已写入并读回核对。请在手机番茄计划中刷新，核对同名记录及“对话计划测试”分类。")
         elif args.serve:
             try:

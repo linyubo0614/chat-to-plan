@@ -8,7 +8,17 @@ LISTS = ("listInfoList","listClockList","listCategoryList","listChildList","list
 
 
 class TomatoUnverified(Exception):
-    pass
+    def __init__(self, code, response_code=None):
+        super().__init__(code)
+        self.code = code
+        self.response_code = response_code if type(response_code) is int else None
+
+
+def check_reply(reply):
+    if not isinstance(reply, dict):
+        raise TomatoUnverified("website_protocol_changed")
+    if reply.get("code") != 200 or not isinstance(reply.get("data"), dict):
+        raise TomatoUnverified("session_or_response_unavailable", reply.get("code"))
 
 
 def request(opt_id=-1, records=None, categories=None):
@@ -19,8 +29,7 @@ def request(opt_id=-1, records=None, categories=None):
 
 
 def validate_snapshot(reply):
-    if reply.get("code") != 200 or not isinstance(reply.get("data"),dict):
-        raise TomatoUnverified("session_or_response_unavailable")
+    check_reply(reply)
     data = reply["data"]
     if data.get("differenceData"):
         raise TomatoUnverified("sync_conflict")
@@ -32,14 +41,18 @@ def validate_snapshot(reply):
 def prepare_record(snapshot,user_id,key,item):
     if item["kind"] not in {"memo","todo"} or item.get("clarification") or item.get("recurrence_description") or item.get("reminder_minutes") is not None:
         raise TomatoUnverified("unsupported_item")
-    record_id = str(uuid.uuid5(uuid.NAMESPACE_URL,f"chat-planner:tomato:{user_id}:{key}"))
+    identifier = uuid.uuid5(uuid.NAMESPACE_URL,f"chat-planner:tomato:{user_id}:{key}")
+    record_id = identifier.hex
+    # Preserve old successful writes (including locally deleted ones) on retry.
+    if any(row.get("inventoryId") == str(identifier) for row in snapshot["listInfoList"]):
+        record_id = str(identifier)
     category_title = item["category"]
     categories = snapshot["listCategoryList"]
     matching = [row for row in categories if row.get("title")==category_title and not row.get("deleteState")]
     if len(matching)>1:
         raise TomatoUnverified("ambiguous_category")
     category = matching[0] if matching else {
-        "categoryId":str(uuid.uuid5(uuid.NAMESPACE_URL,f"chat-planner:tomato-category:{user_id}:{category_title}")),
+        "categoryId":uuid.uuid5(uuid.NAMESPACE_URL,f"chat-planner:tomato-category:{user_id}:{category_title}").hex,
         "userId":user_id,"title":category_title,"sortNum":max([row.get("sortNum",0) for row in categories]+[0])+10,
         "createTimeStamp":int(time.time()*1000),"dataAction":"add"}
     start_date,start_time = "",-1
@@ -71,17 +84,21 @@ def verify_record(snapshot,expected):
     return True
 
 
-def write_verified(sync,user_id,key,item):
+def write_verified(sync,user_id,key,item,progress=None):
     # Read before each attempt: a timeout may have occurred after a successful write.
+    if progress: progress("read")
     snapshot = validate_snapshot(sync(request()))
     record,categories = prepare_record(snapshot,user_id,key,item)
     if verify_record(snapshot,record):
         return record["inventoryId"]
     if any(row.get("inventoryId")==record["inventoryId"] for row in snapshot["listInfoList"]):
         raise TomatoUnverified("target_record_deleted_or_conflicting")
+    if progress: progress("write")
     reply = sync(request(snapshot["lastOptId"],[record],categories))
-    if reply.get("code") != 200 or not isinstance(reply.get("data"),dict) or reply["data"].get("differenceData"):
-        raise TomatoUnverified("write_not_confirmed")
+    check_reply(reply)
+    if reply["data"].get("differenceData"):
+        raise TomatoUnverified("sync_conflict")
+    if progress: progress("readback")
     readback = validate_snapshot(sync(request()))
     if not verify_record(readback,record):
         raise TomatoUnverified("record_not_found_after_write")

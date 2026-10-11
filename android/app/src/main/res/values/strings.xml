@@ -43,9 +43,9 @@
     <string name="hita">HITA</string>
     <string name="open_inbox">消息与事项</string>
     <string name="inbox_title">消息与事项</string>
-    <string name="inbox_help">查看消息分析结果，修改或取消尚未写入的事项。这里的记录保存在你的服务中，目标应用是否收到以事项状态为准。</string>
+    <string name="inbox_help">查看微信整理结果，补充或取消未交付的 HITA 日程。日常在微信使用 GPT-6；此页发送消息仅用于可选的 DeepSeek 测试。</string>
     <string name="refresh">返回消息列表并刷新</string>
-    <string name="send_message">发送消息</string>
+    <string name="send_message">可选：DeepSeek 测试</string>
     <string name="resume_send">继续发送上次未确认的消息</string>
     <string name="load_more">加载更早的消息</string>
     <string name="loading">正在读取…</string>

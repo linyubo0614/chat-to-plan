@@ -36,7 +36,7 @@ public final class PlannerActivity extends Activity {
     private LocalDate selected=LocalDate.now(ZoneId.of("Asia/Shanghai"));
     private YearMonth month=YearMonth.from(selected);
     private boolean memos=false, alive=false, loading=false, editing=false;
-    private String category="", query="", signature="";
+    private String category="", query="", signature="", activeBase="";
     private JSONArray records=new JSONArray(), days=new JSONArray(), categories=new JSONArray();
     private int limit=50;
     private boolean more=false;
@@ -266,7 +266,9 @@ public final class PlannerActivity extends Activity {
     private String encode(String value) {try {return URLEncoder.encode(value,"UTF-8");} catch(java.io.UnsupportedEncodingException ex){throw new IllegalStateException(ex);}}
     private void load(boolean force) {
         if (loading||isFinishing())return;
-        String base=credentials.server();if(base.isEmpty()){notice.setText("先在设置中连接电脑服务，再开始记录。");return;}
+        String base=credentials.server();
+        if(!base.equals(activeBase)){activeBase=base;records=new JSONArray();days=new JSONArray();categories=new JSONArray();category="";query="";signature="";render();}
+        if(base.isEmpty()){notice.setText("先在设置中连接电脑服务，再开始记录。");return;}
         loading=true;boolean tab=memos;String group=category,search=query;LocalDate day=selected;YearMonth shown=month;int requested=limit;
         String path="/v1/planner/records?kind="+(tab?"memo":"todo")+"&limit="+Math.min(requested,200)+
             (tab?(group.isEmpty()?"":"&category="+encode(group))+"&q="+encode(search):"&day="+day);

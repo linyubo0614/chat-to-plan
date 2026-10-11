@@ -71,7 +71,7 @@ export function createTools(config, context = {}) {
 
   return [{
     name: "chat_planner_record", label: "记录计划",
-    description: "仅在用户明确要求新增备忘、待办、日程或课程时调用。由当前模型整理，后端不再调用 DeepSeek。相对日期先查 chat_planner_status 的 server_time。不要猜测日期或结束时间，缺失填 clarification/question。待办日期 task_date 默认为今天；重要和紧急按用户意图分别设置，分类支持自定义。以返回状态确认保存或交付。失败重试沿用返回的 operation_id 和原始内容。修改或撤销已有记录不使用本工具。",
+    description: "用户提供需要保存的具体信息、待办、日程或课程时自动整理记录，不要求固定口令；纯闲聊、知识问答不写入。意图不清楚先追问。由当前模型整理，后端不再调用 DeepSeek。相对日期先查 chat_planner_status 的 server_time。不要猜测日期或结束时间，缺失填 clarification/question。待办日期 task_date 默认为今天；重要和紧急按用户意图分别设置，分类支持自定义。以返回状态确认保存或交付。失败重试沿用返回的 operation_id 和原始内容。修改或撤销已有记录不使用本工具。",
     parameters: recordSchema,
     async execute(toolCallId, params, signal) {
       const operationId = params.operation_id ?? createHash("sha256")

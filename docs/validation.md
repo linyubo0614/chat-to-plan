@@ -10,6 +10,8 @@
 - Gradle 8.11.1、JDK 与 Android SDK 下载均保留官方校验；Java 代理使用系统信任库，没有禁用 TLS。
 - 官网只读访问与 HITA APK/公开源码调查完成。
 
-未验证：真实 DeepSeek 付费请求、真实微信客服账号收发、番茄计划写入和手机同步、HITA 真机导入、QQ 接入、OPPO 真机 UI。未发布生产服务或正式签名 APK，GitHub Actions 的远端执行结果需另行确认。
+首个 GitHub Actions 运行中后端测试通过，安卓在 `android-actions/setup-android@v3` 初始化 SDK 时失败，未执行 APK 构建及上传。修复为固定 Ubuntu 24.04 官方镜像的预装 API 35/Build Tools 35.0.0、JDK 21 和已校验的 Gradle wrapper，新运行结果单独验证。
+
+未验证：真实 DeepSeek 付费请求、真实微信客服账号收发、番茄计划写入和手机同步、HITA 真机导入、QQ 接入、OPPO 真机 UI。未发布生产服务或正式签名 APK。
 
 HITA 原版静默写入缺少上游接口，为明确阻塞；不会把本机生成 ICS 或服务端保存任务视为目标应用写入成功。

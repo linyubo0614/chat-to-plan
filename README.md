@@ -36,6 +36,8 @@ bash scripts/start.sh
 
 ## 安卓 App
 
+[下载首版调试 APK](https://github.com/linyubo0614/vibecoding_test_01/raw/refs/heads/main/downloads/chat-planner-0.1.0-debug.apk)。这是实际保存在 GitHub 的安装包，不依赖聊天工作区链接或 Actions 构建是否成功。
+
 源代码在 [`android/`](android/)，Android 8.0 及以上可用。只需网络权限，不申请无障碍、联系人或存储访问。
 
 安装后填写你的 HTTPS 服务地址和连接口令，点击“连接并读取设置”。填写 DeepSeek Key 并点击“保存设置”。空白 Key 保留现有配置，单独按钮用于移除 Key。功能开关保存后在服务端持久生效，关闭 App 不会停止服务。

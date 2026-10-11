@@ -35,7 +35,7 @@ public final class PlannerActivity extends Activity {
     private TextView notice;
     private LocalDate selected=LocalDate.now(ZoneId.of("Asia/Shanghai"));
     private YearMonth month=YearMonth.from(selected);
-    private boolean memos=false, alive=false, loading=false, editing=false;
+    private boolean memos=false, alive=false, loading=false, editing=false, calendarExpanded=false;
     private String category="", query="", signature="", activeBase="";
     private JSONArray records=new JSONArray(), days=new JSONArray(), categories=new JSONArray();
     private int limit=50;
@@ -56,13 +56,14 @@ public final class PlannerActivity extends Activity {
         if (state!=null) {
             selected=LocalDate.parse(state.getString("day",selected.toString()));
             month=YearMonth.parse(state.getString("month",month.toString()));
-            memos=state.getBoolean("memos"); category=state.getString("category",""); query=state.getString("query","");
+            memos=state.getBoolean("memos");calendarExpanded=state.getBoolean("calendarExpanded"); category=state.getString("category",""); query=state.getString("query","");
         }
         render();
     }
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state); state.putString("day",selected.toString()); state.putString("month",month.toString());
         state.putBoolean("memos",memos); state.putString("category",category); state.putString("query",query);
+        state.putBoolean("calendarExpanded",calendarExpanded);
     }
     @Override protected void onResume() { super.onResume(); alive=true; load(true); ui.postDelayed(poll,3000); }
     @Override protected void onPause() { alive=false; ui.removeCallbacks(poll); super.onPause(); }
@@ -86,6 +87,11 @@ public final class PlannerActivity extends Activity {
     }
     private LinearLayout card(int color) {
         LinearLayout v=column(); v.setPadding(dp(16),dp(16),dp(16),dp(16)); v.setBackground(shape(color,20)); return v;
+    }
+    private TextView monthArrow(String label,Runnable action) {
+        TextView arrow=text(label,24,GREEN,false);arrow.setGravity(Gravity.CENTER);arrow.setBackground(shape(0xffe8efea,12));
+        arrow.setLayoutParams(new LinearLayout.LayoutParams(dp(44),dp(44)));arrow.setOnClickListener(v->action.run());
+        arrow.setContentDescription(label.equals("‹")?"上一月":"下一月");return arrow;
     }
     private void render() {
         root=column(); root.setBackgroundColor(PAPER);
@@ -116,25 +122,28 @@ public final class PlannerActivity extends Activity {
     }
     private void renderTasks() {
         LinearLayout calendar=card(Color.WHITE); LinearLayout title=row();
-        title.addView(button("‹",()->moveMonth(-1))); TextView heading=text(month.getYear()+" 年 "+month.getMonthValue()+" 月",19,INK,true);
-        heading.setGravity(Gravity.CENTER); weight(title,heading); title.addView(button("›",()->moveMonth(1))); calendar.addView(title); gap(calendar,12);
+        title.addView(monthArrow("‹",()->moveMonth(-1))); TextView heading=text(month.getYear()+" 年 "+month.getMonthValue()+" 月 "+(calendarExpanded?"▴":"▾"),17,INK,true);
+        heading.setGravity(Gravity.CENTER);heading.setPadding(0,dp(10),0,dp(10));heading.setOnClickListener(v->{calendarExpanded=!calendarExpanded;render();notice.setText("已连接 · 点击日期查看任务");});
+        weight(title,heading);title.addView(monthArrow("›",()->moveMonth(1)));calendar.addView(title);gap(calendar,8);
         LinearLayout weekdays=row(); for (String label:new String[]{"一","二","三","四","五","六","日"}) {
             TextView cell=text(label,12,MUTED,false); cell.setGravity(Gravity.CENTER); weight(weekdays,cell);
-        } calendar.addView(weekdays); gap(calendar,8);
+        } calendar.addView(weekdays); gap(calendar,4);
         int offset=month.atDay(1).getDayOfWeek().getValue()-1, n=month.lengthOfMonth();
-        for (int week=0;week<(offset+n+6)/7;week++) {
+        int firstWeek=calendarExpanded?0:(offset+selected.getDayOfMonth()-1)/7;
+        int afterWeek=calendarExpanded?(offset+n+6)/7:firstWeek+1;
+        for (int week=firstWeek;week<afterWeek;week++) {
             LinearLayout line=row();
             for (int weekday=0;weekday<7;weekday++) {
                 int value=week*7+weekday-offset+1;
                 TextView cell=text("",14,INK,false); cell.setGravity(Gravity.CENTER);
-                LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(48),1); p.setMargins(dp(1),dp(2),dp(1),dp(2)); line.addView(cell,p);
+                LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(36),1); p.setMargins(dp(1),dp(1),dp(1),dp(1)); line.addView(cell,p);
                 if (value>0&&value<=n) {
                     LocalDate date=month.atDay(value); int remaining=0;
                     for (int i=0;i<days.length();i++) { JSONObject d=days.optJSONObject(i); if (date.toString().equals(d.optString("day"))) remaining=d.optInt("total")-d.optInt("completed"); }
                     cell.setText(value+(remaining>0?"\n· "+remaining:"")); cell.setTextSize(13);
                     if (date.equals(selected)) { cell.setBackground(shape(GREEN,13)); cell.setTextColor(Color.WHITE); }
                     else if (date.equals(LocalDate.now(ZoneId.of("Asia/Shanghai")))) cell.setBackground(shape(0xffe8efea,13));
-                    cell.setOnClickListener(v->{ selected=date; limit=50; records=new JSONArray(); signature=""; render(); load(true); });
+                    cell.setOnClickListener(v->{ selected=date;calendarExpanded=false; limit=50; records=new JSONArray(); signature=""; render(); load(true); });
                 }
             } calendar.addView(line);
         } content.addView(calendar); gap(content,18);

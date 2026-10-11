@@ -72,6 +72,14 @@ public class PlannerInstrumentedTest extends InstrumentationTestCase {
             await("CI 微信待办");for(String label:new String[]{"优先处理","安排时间","快速处理","从容推进"})await(label);
             screenshot("calendar-quadrants");
             getInstrumentation().runOnMainSync(()->{
+                for(View v:all(activity.getWindow().getDecorView()))if(v instanceof TextView&&((TextView)v).getText().toString().endsWith("月 ▾")){v.performClick();return;}
+                fail("Month expansion missing");
+            });getInstrumentation().waitForIdleSync();screenshot("expanded-month");
+            getInstrumentation().runOnMainSync(()->{
+                for(View v:all(activity.getWindow().getDecorView()))if(v instanceof TextView&&((TextView)v).getText().toString().endsWith("月 ▴")){v.performClick();return;}
+                fail("Month collapse missing");
+            });getInstrumentation().waitForIdleSync();
+            getInstrumentation().runOnMainSync(()->{
                 for(View v:all(activity.getWindow().getDecorView()))if(v instanceof CheckBox&&"完成：CI 微信待办".contentEquals(v.getContentDescription())){v.performClick();return;}
                 fail("Completion control missing");
             });

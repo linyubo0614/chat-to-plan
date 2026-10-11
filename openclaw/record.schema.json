@@ -1,0 +1,191 @@
+{
+  "additionalProperties": false,
+  "description": "Already interpreted by the owner's OpenClaw model; do not parse twice.",
+  "properties": {
+    "text": {
+      "maxLength": 8000,
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    },
+    "interpretation": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "memo",
+                  "todo",
+                  "schedule",
+                  "course"
+                ],
+                "title": "Kind",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              },
+              "body": {
+                "default": "",
+                "maxLength": 8000,
+                "title": "Body",
+                "type": "string"
+              },
+              "category": {
+                "default": "其他",
+                "maxLength": 80,
+                "minLength": 1,
+                "title": "Category",
+                "type": "string"
+              },
+              "important": {
+                "default": false,
+                "title": "Important",
+                "type": "boolean"
+              },
+              "urgent": {
+                "default": false,
+                "title": "Urgent",
+                "type": "boolean"
+              },
+              "task_date": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Task Date"
+              },
+              "starts_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Starts At"
+              },
+              "ends_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Ends At"
+              },
+              "due_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Due At"
+              },
+              "location": {
+                "default": "",
+                "maxLength": 500,
+                "title": "Location",
+                "type": "string"
+              },
+              "reminder_minutes": {
+                "anyOf": [
+                  {
+                    "maximum": 10080,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reminder Minutes"
+              },
+              "recurrence_description": {
+                "default": "",
+                "maxLength": 1000,
+                "title": "Recurrence Description",
+                "type": "string"
+              },
+              "clarification": {
+                "anyOf": [
+                  {
+                    "maxLength": 1000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Clarification"
+              }
+            },
+            "required": [
+              "kind",
+              "title"
+            ],
+            "title": "Item",
+            "type": "object"
+          },
+          "maxItems": 20,
+          "title": "Items",
+          "type": "array"
+        },
+        "question": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Question"
+        }
+      },
+      "title": "Interpretation",
+      "type": "object"
+    },
+    "operation_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32,64}$",
+      "description": "仅重试时填写上次返回的 operation_id；新操作省略。"
+    }
+  },
+  "required": [
+    "text",
+    "interpretation"
+  ],
+  "title": "OpenClawPlan",
+  "type": "object"
+}

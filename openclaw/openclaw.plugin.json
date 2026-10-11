@@ -1,0 +1,23 @@
+{
+  "id": "chat-planner",
+  "name": "对话计划",
+  "version": "0.4.0",
+  "description": "把已连接 OpenClaw 的模型整理出的事项交给个人计划后端",
+  "categories": ["scheduling"],
+  "activation": { "onStartup": true },
+  "skills": ["./skills"],
+  "contracts": { "tools": ["chat_planner_record", "chat_planner_status"] },
+  "toolMetadata": {
+    "chat_planner_record": { "optional": true },
+    "chat_planner_status": { "optional": true }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": { "type": "string", "default": "http://127.0.0.1:8000" },
+      "tokenFile": { "type": "string", "description": "本机后端 data/api-token 的绝对路径；只读，不输出口令" },
+      "receiptWaitMs": { "type": "integer", "minimum": 0, "maximum": 5000, "default": 3000 }
+    }
+  }
+}

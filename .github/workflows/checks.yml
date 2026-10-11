@@ -35,6 +35,24 @@ jobs:
           $Encrypted = [Security.Cryptography.ProtectedData]::Protect($Plain,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)
           $Restored = [Security.Cryptography.ProtectedData]::Unprotect($Encrypted,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)
           if ([Text.Encoding]::UTF8.GetString($Restored) -ne 'temporary-credential-check') { throw 'DPAPI check failed' }
+      - name: Start actual Windows deployment and verify HTTP
+        shell: powershell
+        run: |
+          python -m venv .venv
+          $Server = Start-Process powershell.exe -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','windows/start-assistant.ps1' -PassThru -RedirectStandardOutput 'windows-start.log' -RedirectStandardError 'windows-start-error.log'
+          try {
+            $Ready = $false
+            for ($Attempt = 0; $Attempt -lt 120; $Attempt++) {
+              if ($Server.HasExited) { throw 'Windows startup exited before ready' }
+              try {
+                Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8000/healthz' | Out-Null
+                $Ready = $true; break
+              } catch { Start-Sleep -Seconds 1 }
+            }
+            if (-not $Ready) { throw 'Windows service did not become ready' }
+            .venv/Scripts/python.exe scripts/smoke.py
+            if ($LASTEXITCODE -ne 0) { throw 'Windows HTTP smoke failed' }
+          } finally { taskkill.exe /PID $Server.Id /T /F | Out-Null }
   backend:
     runs-on: ubuntu-24.04
     steps:

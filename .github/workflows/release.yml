@@ -4,24 +4,39 @@ on:
     tags: ['v*-preview', 'hita-v*-planner.*']
 permissions:
   contents: read
+  actions: read
 jobs:
-  checks:
-    uses: ./.github/workflows/checks.yml
   publish:
-    needs: checks
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v5
+      - name: Find successful checks for this exact commit
+        id: verified
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CHECKS_RUN=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow checks.yml \
+            --commit "$GITHUB_SHA" --status success --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$CHECKS_RUN" ]; then
+            echo 'No successful checks for this commit; publish the tag only after all checks pass.' >&2
+            exit 1
+          fi
+          echo "run_id=$CHECKS_RUN" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           name: chat-planner-debug-apk
           path: release-assets
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.verified.outputs.run_id }}
       - uses: actions/download-artifact@v4
         with:
           name: hita-planner-debug-apk
           path: hita-assets
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.verified.outputs.run_id }}
       - name: Prepare verified APK
         run: |
           mv release-assets/app-debug.apk release-assets/chat-planner-debug.apk

@@ -9,17 +9,20 @@ import httpx
 from .tomato_protocol import TomatoUnverified, write_verified
 
 
-CALL = """async (payload) => {
+CALL = """async ({payload, expected_user}) => {
     if (location.origin !== 'https://www.incmoon.com') throw new Error('Unexpected origin');
-    const app=document.getElementById('app')?.__vue__;
+    const app=document.body.firstElementChild?.__vue__;
     if (!app?.$api?.getSyncList) throw new Error('Website changed');
+    if (app.$store?.state?.userId !== expected_user || localStorage.getItem('userId') !== expected_user)
+        throw new Error('Account changed');
     const response=await app.$api.getSyncList(payload);
     return response.data;
 }"""
 IDENTITY = """() => {
     if (location.origin !== 'https://www.incmoon.com') return null;
-    const app=document.getElementById('app')?.__vue__;
-    return app?.$store?.getters?.userId || null;
+    const app=document.body.firstElementChild?.__vue__;
+    const id=app?.$store?.state?.userId;
+    return id && id === localStorage.getItem('userId') ? id : null;
 }"""
 
 
@@ -46,7 +49,7 @@ def main():
         input("登录完成后按回车继续：")
         user_id=page.evaluate(IDENTITY)
         if not user_id: raise SystemExit("未识别到已登录账号，请进入清单页后重试。")
-        def sync(payload): return page.evaluate(CALL,payload)
+        def sync(payload): return page.evaluate(CALL,{"payload":payload,"expected_user":user_id})
         if args.write_test or args.serve:
             test={"kind":"memo","title":"对话计划授权验证","body":"这是你授权创建的接入测试记录，可在验证完成后手动删除。","category":"对话计划测试"}
             try:

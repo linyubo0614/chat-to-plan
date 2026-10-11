@@ -165,7 +165,7 @@ public final class PlannerActivity extends Activity {
             LinearLayout pair=row(); pair.setGravity(Gravity.TOP);
             for (int col=0;col<2;col++) {
                 int quadrant=line*2+col; LinearLayout box=card(colors[quadrant]);box.setPadding(dp(12),dp(14),dp(12),dp(12));
-                box.setMinimumHeight(dp(190)); box.addView(text(names[quadrant],16,INK,true)); gap(box,4); box.addView(text(subtitles[quadrant],11,MUTED,false)); gap(box,10);
+                box.setMinimumHeight(dp(160)); box.addView(text(names[quadrant],16,INK,true)); gap(box,4); box.addView(text(subtitles[quadrant],11,MUTED,false)); gap(box,10);
                 int count=0;
                 for (int pass=0;pass<2;pass++) for (int i=0;i<records.length();i++) {
                     JSONObject task=records.optJSONObject(i); int q=(task.optBoolean("important")?0:2)+(task.optBoolean("urgent")?0:1);

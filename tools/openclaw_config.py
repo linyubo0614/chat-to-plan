@@ -36,8 +36,14 @@ def find_command(name):
     raise SetupError('未找到 OpenClaw。请确认微信机器人在 Windows 原生运行；WSL 版本需要单独接入。' if name=='openclaw' else '未找到 Cloudflare。请点击“安装连接组件”，安装完成后再启动。')
 
 def command_args(command,arguments):
-    # No secret is an argument. cmd wrappers are only npm-installed executables.
-    return [os.environ.get('COMSPEC','cmd.exe'),'/d','/c',subprocess.list2cmdline([command,*arguments])] if os.name=='nt' and command.lower().endswith(('.cmd','.bat')) else [command,*arguments]
+    # Resolve npm's OpenClaw shim to Node directly. Windows CMD wrappers fail
+    # easily with quoted installation paths; no shell is needed for this CLI.
+    if os.name=='nt' and command.lower().endswith(('.cmd','.bat')):
+        folder=Path(command).parent
+        for entry in [folder.parent/'openclaw/openclaw.mjs',folder/'node_modules/openclaw/openclaw.mjs']:
+            if entry.is_file():return [find_command('node'),str(entry.resolve()),*arguments]
+        return subprocess.list2cmdline([os.environ.get('COMSPEC','cmd.exe')])+' /d /s /c "'+subprocess.list2cmdline([command,*arguments])+'"'
+    return [command,*arguments]
 
 class OpenClaw:
     def __init__(self,root,command=None):
@@ -82,7 +88,10 @@ class OpenClaw:
         agents=self.get('agents',{})
         for _,agent in agent_values(agents):agent['tools']=enable_tools(agent.get('tools',{}))
         batch=[{'path':'plugins.allow','value':plugins},{'path':'plugins.entries.chat-planner.enabled','value':True},{'path':'plugins.entries.chat-planner.config.baseUrl','value':'http://127.0.0.1:8000'},{'path':'plugins.entries.chat-planner.config.tokenFile','value':str(token)},{'path':'tools','value':tools}]
-        if list(agent_values(agents)):batch.append({'path':'agents','value':agents})
+        if agents.get('entries'):
+            for name,agent in agents['entries'].items():batch.append({'path':f'agents.entries.{name}.tools','value':agent['tools']})
+        else:
+            for index,agent in enumerate(agents.get('list',[])):batch.append({'path':f'agents.list[{index}].tools','value':agent['tools']})
         self.apply(batch)
         self.inspect()
     def inspect(self):
@@ -151,6 +160,8 @@ def deepseek_agents(agents):
     return agents
 
 def main():
+    import sys
+    if sys.stdout is not None and hasattr(sys.stdout,'reconfigure'):sys.stdout.reconfigure(encoding='utf-8',errors='replace')
     parser=argparse.ArgumentParser();parser.add_argument('--root',default='.');parser.add_argument('--install',action='store_true');args=parser.parse_args()
     try:
         claw=OpenClaw(args.root)

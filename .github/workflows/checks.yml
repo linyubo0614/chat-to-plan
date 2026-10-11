@@ -64,7 +64,7 @@ jobs:
             $env:OPENCLAW_STATE_DIR = Join-Path $HostRoot 'state'
             $env:OPENCLAW_CONFIG_PATH = Join-Path $env:OPENCLAW_STATE_DIR 'openclaw.json'
             New-Item -ItemType Directory -Path $env:OPENCLAW_STATE_DIR -Force | Out-Null
-            $Seed = '{"agents":{"defaults":{"model":{"primary":"openai/gpt-6"}},"list":[{"id":"main","model":"openai/gpt-6","tools":{"allow":["read"]}},{"id":"helper","model":"openai/gpt-6","subagents":{"model":"openai/gpt-6"}}]},"tools":{"alsoAllow":["existing-tool"]}}'
+            $Seed = '{"agents":{"ownership":"explicit","defaults":{"systemAgent":{"agentId":"main"},"model":{"primary":"openai/gpt-6"}},"entries":{"main":{"default":true,"model":"openai/gpt-6","tools":{"allow":["read"]}},"helper":{"model":"openai/gpt-6","subagents":{"model":"openai/gpt-6"}}}},"tools":{"alsoAllow":["existing-tool"]}}'
             [IO.File]::WriteAllText($env:OPENCLAW_CONFIG_PATH,$Seed,(New-Object Text.UTF8Encoding($false)))
             powershell.exe -NoProfile -ExecutionPolicy Bypass -File windows/install-openclaw.ps1
             if ($LASTEXITCODE -ne 0) { throw 'Native OpenClaw installer failed' }

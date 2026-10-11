@@ -1,6 +1,6 @@
 # 验证记录
 
-0.5.0 本地验证：43 个 Python 测试（含并发 HITA 等待唤醒）、8 个 Node 工具测试；安卓三页 UI 编译与 lint。官方 OpenClaw 2026.10.1 隔离实例验证工具安装、每助手权限和 DeepSeek 模型配置；测试 Key 为无效合成值，不使用真实账户。
+0.5.0 本地验证：44 个 Python 测试（含并发 HITA 等待唤醒）、8 个 Node 工具测试；安卓三页 UI 编译与 lint。官方 OpenClaw 2026.10.1 隔离实例验证工具安装、每助手权限和 DeepSeek 模型配置；测试 Key 为无效合成值，不使用真实账户。
 
 GitHub checks 必须验证原生 Windows 安装及全部助手 DeepSeek 模型配置、独立 ChatPlanner.exe 的窗口启动及真实服务写入、安卓模拟器三页切换/截图许可/备忘编辑、HITA 原有测试和真实 Room 数据库写入及连接页启动。发布仅复用同一提交的成功构建。
 

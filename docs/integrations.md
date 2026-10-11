@@ -30,6 +30,10 @@ APK 包含公开项目地址：[HIT-A/HITA_Android](https://github.com/HIT-A/HIT
 
 下一步需在用户自己的授权会话中确认同步数据模型、新增记录、分类与冲突规则、过期行为及安卓同步。不能盲目提交整个同步集合，避免覆盖已有内容。未实现模拟登录或自动写入，任务保持 `blocked`。
 
+继续只读分析官网 JS 后，确认清单页面用 POST `/tomato/syncData/listInfo` 同时获取数据和提交变更。读取请求为 `optId: -1`，六个列表（listInfoList、listClockList、listCategoryList、listChildList、listTimeLineList、listDeleteList）均为空；写入请求携带当前 optId 和对应变更列表。网页只在 code=200 且 differenceData 为假时更新本地结果，并保存返回的 lastOptId。遇到 differenceData 不能假设写入成功，必须先重新同步并核对。此证据来自网页代码，不代表真实会话联调或稳定公开 API。
+
+用户已确认拥有账号并愿意通过 App 授权。尚未收集登录凭据；App 尚未实现番茄计划登录授权。需继续确认记录完整字段、认证头生成规则、会话失效处理以及同一 inventoryId 重试的服务端行为，才能启用真实自动写入。
+
 ## QQ
 
 下一阶段基于官方机器人后台核对私聊/群聊场景，取得 AppID 与官方凭据后接入统一 inbox。当前没有 QQ 收发代码，不把通用 HTTP 接口当作 QQ 接入完成。

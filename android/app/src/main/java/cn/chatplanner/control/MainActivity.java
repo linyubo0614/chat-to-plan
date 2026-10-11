@@ -2,6 +2,7 @@ package cn.chatplanner.control;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -33,7 +34,7 @@ public class MainActivity extends Activity {
     private Switch enabled;
     private Spinner model;
     private TextView status, keyStatus;
-    private Button connect, save, clear, test;
+    private Button connect, save, clear, test, inbox;
     private String connectedBase = "", connectedToken = "";
     private boolean busy = false;
     private volatile boolean destroyed = false;
@@ -74,6 +75,8 @@ public class MainActivity extends Activity {
         LinearLayout integrations = card(root, R.string.integrations);
         integrations.addView(label(R.string.integration_default, 14));
         test = button(integrations, R.string.test_message); test.setOnClickListener(v -> testMessage());
+        inbox = button(integrations, R.string.open_inbox);
+        inbox.setOnClickListener(v -> startActivity(new Intent(this, InboxActivity.class)));
         root.addView(label(R.string.security, 12));
         setContentView(scroll); setBusy(false);
         if (!credentials.server().isEmpty()) connect();
@@ -99,6 +102,7 @@ public class MainActivity extends Activity {
         busy = value; boolean connected = !connectedBase.isEmpty();
         connect.setEnabled(!busy); save.setEnabled(!busy && connected); clear.setEnabled(!busy && connected);
         test.setEnabled(!busy && connected); server.setEnabled(!busy); token.setEnabled(!busy);
+        inbox.setEnabled(!busy && connected);
         key.setEnabled(!busy && connected); enabled.setEnabled(!busy && connected); model.setEnabled(!busy && connected);
     }
     private void failed() { post(() -> { status.setText(R.string.failed); setBusy(false); }); }

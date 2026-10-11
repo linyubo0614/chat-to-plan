@@ -34,6 +34,15 @@ Docker Compose 方式使用 `.env`，数据位于 `assistant-data` 持久卷。�
 
 分析失败后，可修复配置，再对原消息调用 `POST /v1/messages/{id}/retry`。成功解析的消息不能重试，防止生成重复任务。微信回复队列与分析状态独立；可通过消息详情的 `reply` 检查回复是否失败。
 
+## 消息历史与待写入事项
+
+- `GET /v1/messages?limit=20&before=<cursor>`：返回本人消息的时间、来源、最多300字预览、状态和事项状态计数。`next_cursor` 为 null 时没有下一页；分页使用不可变的消息顺序编号，新消息不会造成旧页重复。limit 范围1–50。
+- `GET /v1/messages/{id}`：包含完整原文、解析事项及每项的 `revision`。
+- `PUT /v1/tasks/{id}`：提交 `{ "revision": 0, "item": <完整 Item> }`，验证分类和时间后替换助手中的待写入事项。只允许 blocked/needs_clarification；不会伪造写入状态。
+- `DELETE /v1/tasks/{id}?revision=0`：取消待写入事项并保留原文、记录内容；不是删除目标软件内容。取消后不能导出 ICS。
+
+两种事项更新均原子检查 revision，不匹配返回409。所有接口要求实例连接口令并限定 owner。数据库自动为旧 tasks 表添加 revision，保留原有数据。手机端也需要与0.2.0后端一起更新。
+
 ## 备份与恢复
 
 备份前停止服务，复制 `assistant.db` 和 `credential.key`；如使用在线 SQLite 备份工具则按其事务约定操作。不要只复制活跃主数据库而忽略 WAL。保留环境变量配置和连接口令。数据备份、密钥、APK、个人账号信息不进入 GitHub。

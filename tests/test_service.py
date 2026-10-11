@@ -107,6 +107,74 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(len({row[0]["id"] for row in results}),1)
         self.assertEqual(sum(row[1] for row in results),1)
 
+    def test_history_pagination_and_owner_isolation(self):
+        keys = [self.submit("消息"+str(i),"history"+str(i)).json()["id"] for i in range(5)]
+        self.store.ingest("api","private","someone-else","private text")
+        self.assertEqual(self.client.get("/v1/messages").status_code,401)
+        page = self.client.get("/v1/messages?limit=2",headers=self.headers).json()
+        self.assertEqual([x["id"] for x in page["messages"]],list(reversed(keys))[:2])
+        self.submit("新消息","new-history")
+        older = self.client.get(f'/v1/messages?limit=2&before={page["next_cursor"]}',headers=self.headers).json()
+        self.assertEqual([x["id"] for x in older["messages"]],[keys[2],keys[1]])
+        last = self.client.get(f'/v1/messages?limit=2&before={older["next_cursor"]}',headers=self.headers).json()
+        self.assertEqual([x["id"] for x in last["messages"]],[keys[0]])
+        self.assertIsNone(last["next_cursor"])
+        self.assertEqual(self.client.get("/v1/messages?limit=51",headers=self.headers).status_code,422)
+        self.assertEqual(self.client.get("/v1/messages?before=0",headers=self.headers).status_code,422)
+
+    def test_edit_cancel_revision_and_export(self):
+        message_id = self.submit().json()["id"]
+        self.app.state.worker.run_once()
+        row = self.store.get_message(message_id,"owner")
+        task = row["tasks"][1]
+        item = task["payload"]
+        item.update(title="修改后的高数",category="学习",ends_at=None,clarification=None)
+        url = f'/v1/tasks/{task["id"]}'
+        response = self.client.put(url,headers=self.headers,json={"revision":0,"item":item})
+        updated = response.json()["tasks"][1]
+        self.assertEqual(updated["revision"],1)
+        self.assertEqual(updated["status"],"needs_clarification")
+        self.assertEqual(updated["payload"]["title"],"修改后的高数")
+        self.assertEqual(self.client.get(url+"/calendar.ics",headers=self.headers).status_code,409)
+        item.update(ends_at="2026-10-14T16:30:00+08:00",clarification=None)
+        self.assertEqual(self.client.put(url,headers=self.headers,json={"revision":0,"item":item}).status_code,409)
+        response = self.client.put(url,headers=self.headers,json={"revision":1,"item":item})
+        self.assertEqual(response.json()["tasks"][1]["status"],"blocked")
+        self.assertEqual(self.client.get(url+"/calendar.ics",headers=self.headers).status_code,200)
+        self.assertEqual(self.client.delete(url+"?revision=1",headers=self.headers).status_code,409)
+        cancelled = self.client.delete(url+"?revision=2",headers=self.headers)
+        self.assertEqual(cancelled.json()["tasks"][1]["status"],"cancelled")
+        self.assertEqual(self.client.get(url+"/calendar.ics",headers=self.headers).status_code,409)
+        self.assertEqual(self.client.put(url,headers=self.headers,json={"revision":3,"item":item}).status_code,409)
+        self.assertEqual(len(self.store.get_message(message_id,"owner")["tasks"]),2)
+        self.assertEqual(Store(self.settings.db_path).get_message(message_id,"owner")["tasks"][1]["status"],"cancelled")
+
+    def test_edit_is_authenticated_and_validated(self):
+        message_id = self.submit().json()["id"]
+        self.app.state.worker.run_once()
+        task = self.store.get_message(message_id,"owner")["tasks"][0]
+        url = f'/v1/tasks/{task["id"]}'
+        body = {"revision":0,"item":task["payload"]}
+        self.assertEqual(self.client.put(url,json=body).status_code,401)
+        self.assertEqual(self.client.delete(url+"?revision=0").status_code,401)
+        self.assertIsNone(self.store.update_task(task["id"],"different-owner",0,cancel=True))
+        self.assertEqual(self.client.put("/v1/tasks/unknown",headers=self.headers,json=body).status_code,404)
+        body["item"]["starts_at"] = "2026-10-14T15:00:00"
+        self.assertEqual(self.client.put(url,headers=self.headers,json=body).status_code,422)
+        self.assertEqual(self.store.get_message(message_id,"owner")["tasks"][0]["revision"],0)
+
+    def test_existing_database_migrates_without_losing_tasks(self):
+        import sqlite3
+        path = Path(self.tmp.name)/"legacy.db"
+        with sqlite3.connect(path) as db:
+            db.execute("CREATE TABLE tasks(id TEXT PRIMARY KEY,message_id TEXT NOT NULL,target TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL)")
+            db.execute("INSERT INTO tasks VALUES('old','message','tomato','{}','blocked','waiting')")
+        migrated = Store(path)
+        with migrated.connection() as db:
+            old = db.execute("SELECT * FROM tasks WHERE id='old'").fetchone()
+        self.assertEqual(old["revision"],0)
+        self.assertEqual(old["reason"],"waiting")
+
     def test_expired_lease_and_late_worker_are_fenced(self):
         key = self.submit().json()["id"]
         first = self.store.claim("messages")

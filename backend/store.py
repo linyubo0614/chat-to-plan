@@ -46,6 +46,9 @@ class Store:
                     available REAL NOT NULL DEFAULT 0, lease REAL NOT NULL DEFAULT 0, error TEXT
                 );
             """)
+            columns = {row[1] for row in db.execute("PRAGMA table_info(tasks)")}
+            if "revision" not in columns:
+                db.execute("ALTER TABLE tasks ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
         os.chmod(path, 0o600)
 
     @contextmanager
@@ -115,7 +118,7 @@ class Store:
                     "HITA 未提供已验证的外部写入接口；尚未写入手机。" if item.target == "hita"
                     else "番茄计划写入接口尚未验证；尚未写入应用。"
                 )
-                db.execute("INSERT INTO tasks VALUES(?,?,?,?,?,?)", (uuid.uuid4().hex,row["id"],item.target,item.model_dump_json(),status,reason))
+                db.execute("INSERT INTO tasks(id,message_id,target,payload,status,reason) VALUES(?,?,?,?,?,?)", (uuid.uuid4().hex,row["id"],item.target,item.model_dump_json(),status,reason))
             db.execute("UPDATE messages SET status='parsed',question=?,lease=0,error=NULL WHERE id=?", (result.question,row["id"]))
             if row["source"] == "wechat":
                 lines = ["已完成内容分析；尚未写入目标应用。"]
@@ -133,16 +136,48 @@ class Store:
 
     def get_message(self, key, owner):
         with self.connection() as db:
-            row = db.execute("SELECT id,status,attempts,error,question FROM messages WHERE id=? AND owner=?", (key,owner)).fetchone()
+            row = db.execute("SELECT id,source,text,created,status,attempts,error,question FROM messages WHERE id=? AND owner=?", (key,owner)).fetchone()
             if not row:
                 return None
             result = dict(row)
             receipt = db.execute("SELECT status,error FROM outbox WHERE id=?", (key,)).fetchone()
             result["reply"] = dict(receipt) if receipt else None
-            result["tasks"] = [dict(x) for x in db.execute("SELECT id,target,payload,status,reason FROM tasks WHERE message_id=?", (key,))]
+            result["tasks"] = [dict(x) for x in db.execute("SELECT id,target,payload,status,reason,revision FROM tasks WHERE message_id=? ORDER BY rowid", (key,))]
             for task in result["tasks"]:
                 task["payload"] = json.loads(task["payload"])
             return result
+
+    def list_messages(self, owner, limit=20, before=None):
+        with self.connection() as db:
+            rows = db.execute("""SELECT rowid AS cursor,id,source,substr(text,1,300) AS text,
+                created,status,error,question FROM messages
+                WHERE owner=? AND (? IS NULL OR rowid<?) ORDER BY rowid DESC LIMIT ?""",
+                (owner,before,before,limit+1)).fetchall()
+            more = len(rows) > limit
+            entries = [dict(row) for row in rows[:limit]]
+            for entry in entries:
+                entry["tasks"] = {row[0]:row[1] for row in db.execute(
+                    "SELECT status,count(*) FROM tasks WHERE message_id=? GROUP BY status",(entry["id"],))}
+            return {"messages":entries,"next_cursor":entries[-1]["cursor"] if more else None}
+
+    def update_task(self, key, owner, revision, item=None, cancel=False):
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT tasks.* FROM tasks JOIN messages ON tasks.message_id=messages.id WHERE tasks.id=? AND messages.owner=?",(key,owner)).fetchone()
+            if row is None:
+                return None
+            if row["revision"] != revision:
+                raise Conflict("Record changed; refresh before editing")
+            if row["status"] not in {"blocked","needs_clarification"}:
+                raise Conflict("Only records awaiting delivery can be changed")
+            if cancel:
+                db.execute("UPDATE tasks SET status='cancelled',reason='已取消；未写入目标应用。',revision=revision+1 WHERE id=?",(key,))
+            else:
+                status = "needs_clarification" if item.clarification else "blocked"
+                reason = item.clarification or ("HITA 未提供已验证的外部写入接口；尚未写入手机。" if item.target == "hita" else "番茄计划写入接口尚未验证；尚未写入应用。")
+                db.execute("UPDATE tasks SET target=?,payload=?,status=?,reason=?,revision=revision+1 WHERE id=?",
+                    (item.target,item.model_dump_json(),status,reason,key))
+            return row["message_id"]
 
     def retry_message(self, key, owner):
         with self.connection() as db:

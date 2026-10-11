@@ -9,7 +9,7 @@ cd android
 ./gradlew --no-daemon assembleDebug lintDebug
 ```
 
-调试 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 也会上传 `chat-planner-debug-apk` 构建产物，APK 不作为源码提交。
+调试 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 也会上传 `chat-planner-debug-apk` 构建产物。首版 APK 保存在 downloads 供旧版下载；后续版本通过 GitHub Releases 分发。
 
 真机输入自己的 HTTPS 服务地址；调试版在安卓模拟器内可使用 `http://10.0.2.2:8000` 访问宿主机服务。仅此模拟器域名允许 HTTP，正式版只允许 HTTPS；请勿为了连接失败而全局关闭 TLS 校验。
 
@@ -19,6 +19,9 @@ cd android
 - 读取和保存服务器处理开关；操作不依赖 App 持续运行。
 - 配置/移除 DeepSeek Key、选择模型；Key 不在设备本地持久保存。
 - 查看队列状态、发送测试消息并显示结果或明确失败。
+- 分页查看服务器消息历史，查看分类、时间、待补充问题和实际写入状态。
+- 对失败消息重试分析，修改或取消尚未写入的事项；版本冲突要求刷新。
+- 消息发送失败可沿用同一编号重试；待确认消息使用安卓密钥库加密保存。
 - API Key 不回显，敏感界面禁截图，禁止应用备份。
 
 连接口令具有完整的实例管理权限。更换服务器时必须重新输入口令，App 不会把旧口令自动发送给新地址。首次连接要求输入口令，错误或未验证的地址不会覆盖保存的连接。
@@ -33,3 +36,5 @@ cd android
 4. 完成真实微信收发和目标应用写入验收。
 
 调试包用于验证，不代表已完成签名发布、真机兼容或消息入口开通。
+
+推送 `v*-preview` 标签会触发发布工作流，复用后端及 Android 检查，然后从本次构建产物发布 APK 与 SHA256SUMS。不同 CI 机器生成的调试签名可能不同，不能保证覆盖安装；正式持续更新前必须配置固定的正式签名密钥。旧调试包卸载会清除 App 本地连接设置及尚未确认的发送草稿，不会删除服务器记录。

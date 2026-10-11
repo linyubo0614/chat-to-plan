@@ -43,4 +43,27 @@ final class CredentialStore {
         cipher.init(Cipher.DECRYPT_MODE, key(), new GCMParameterSpec(128, iv));
         return new String(cipher.doFinal(Base64.decode(stored, Base64.NO_WRAP)), StandardCharsets.UTF_8);
     }
+
+    private String draftName(String server) {
+        return "draft." + Base64.encodeToString(server.getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP | Base64.URL_SAFE);
+    }
+    String pendingMessage(String server) throws Exception {
+        String name = draftName(server), value = prefs.getString(name, "");
+        if (value.isEmpty()) return "";
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.DECRYPT_MODE, key(), new GCMParameterSpec(128, Base64.decode(prefs.getString(name + ".iv", ""), Base64.NO_WRAP)));
+        return new String(cipher.doFinal(Base64.decode(value, Base64.NO_WRAP)), StandardCharsets.UTF_8);
+    }
+    void savePending(String server, String json) throws Exception {
+        String name = draftName(server);
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding"); cipher.init(Cipher.ENCRYPT_MODE, key());
+        byte[] encrypted = cipher.doFinal(json.getBytes(StandardCharsets.UTF_8));
+        if (!prefs.edit().putString(name, Base64.encodeToString(encrypted, Base64.NO_WRAP))
+                .putString(name + ".iv", Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP)).commit())
+            throw new IllegalStateException("Could not persist pending message");
+    }
+    void clearPending(String server) throws Exception {
+        String name = draftName(server);
+        if (!prefs.edit().remove(name).remove(name + ".iv").commit()) throw new IllegalStateException("Could not clear pending message");
+    }
 }

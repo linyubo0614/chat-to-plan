@@ -1,12 +1,12 @@
 import hmac
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .config import Settings
 from .calendar import export_ics
-from .models import Incoming, Item
+from .models import Incoming, Item, TaskUpdate
 from .parser import DeepSeekParser
 from .runtime import Runtime, SettingsUpdate
 from .store import Conflict, Store
@@ -29,7 +29,7 @@ def create_app(settings=None, parser=None, run_worker=True):
         yield
         worker.stop()
 
-    app = FastAPI(title="对话计划助手", version="0.1.0", lifespan=lifespan,
+    app = FastAPI(title="对话计划助手", version="0.2.0", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.store, app.state.worker, app.state.runtime = store, worker, runtime
     bearer = HTTPBearer(auto_error=False)
@@ -75,6 +75,30 @@ def create_app(settings=None, parser=None, run_worker=True):
             raise HTTPException(404, "Message not found")
         return row
 
+    @app.get("/v1/messages")
+    def messages(limit: int = Query(default=20,ge=1,le=50), before: int | None = Query(default=None,ge=1), owner=Depends(authorize)):
+        return store.list_messages(owner,limit,before)
+
+    @app.put("/v1/tasks/{task_id}")
+    def edit_task(task_id: str, patch: TaskUpdate, owner=Depends(authorize)):
+        try:
+            message_id = store.update_task(task_id,owner,patch.revision,patch.item)
+        except Conflict as exc:
+            raise HTTPException(409,str(exc)) from exc
+        if message_id is None:
+            raise HTTPException(404,"Task not found")
+        return store.get_message(message_id,owner)
+
+    @app.delete("/v1/tasks/{task_id}")
+    def cancel_task(task_id: str, revision: int = Query(ge=0), owner=Depends(authorize)):
+        try:
+            message_id = store.update_task(task_id,owner,revision,cancel=True)
+        except Conflict as exc:
+            raise HTTPException(409,str(exc)) from exc
+        if message_id is None:
+            raise HTTPException(404,"Task not found")
+        return store.get_message(message_id,owner)
+
     @app.post("/v1/messages/{message_id}/retry", status_code=202)
     def retry(message_id: str, owner=Depends(authorize)):
         try:
@@ -90,6 +114,8 @@ def create_app(settings=None, parser=None, run_worker=True):
         task = store.get_task(task_id,owner)
         if task is None:
             raise HTTPException(404,"Task not found")
+        if task["status"] == "cancelled":
+            raise HTTPException(409,"Cancelled records cannot be exported")
         try:
             content = export_ics(task_id,Item.model_validate_json(task["payload"]),task["created"])
         except ValueError as exc:

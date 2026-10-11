@@ -5,6 +5,7 @@
         android:dataExtractionRules="@xml/no_backup"
         android:fullBackupContent="false"
         android:usesCleartextTraffic="false" android:supportsRtl="true">
+        <activity android:name=".InboxActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

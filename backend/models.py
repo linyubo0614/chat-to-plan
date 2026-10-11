@@ -67,3 +67,8 @@ class Interpretation(StrictModel):
         if not self.items and not self.question:
             raise ValueError("At least one item or clarification question is required")
         return self
+
+
+class TaskUpdate(StrictModel):
+    revision: int = Field(ge=0)
+    item: Item

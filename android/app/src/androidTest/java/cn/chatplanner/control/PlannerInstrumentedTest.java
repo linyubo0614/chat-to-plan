@@ -54,8 +54,15 @@ public class PlannerInstrumentedTest extends InstrumentationTestCase {
         final Bitmap[] image={null};getInstrumentation().runOnMainSync(()->{
             View root=activity.getWindow().getDecorView();image[0]=Bitmap.createBitmap(root.getWidth(),root.getHeight(),Bitmap.Config.ARGB_8888);root.draw(new Canvas(image[0]));
         });
-        File file=new File(activity.getExternalFilesDir(null),name+".png");
-        try(FileOutputStream out=new FileOutputStream(file)){image[0].compress(Bitmap.CompressFormat.PNG,100,out);}image[0].recycle();
+        // UTP uninstalls the test app after execution. Shared test images survive
+        // that cleanup and contain only synthetic CI records, never user data.
+        android.content.ContentValues metadata=new android.content.ContentValues();
+        metadata.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME,name+".png");
+        metadata.put(android.provider.MediaStore.Images.Media.MIME_TYPE,"image/png");
+        metadata.put(android.provider.MediaStore.Images.Media.RELATIVE_PATH,"Pictures/ChatPlannerTest");
+        android.net.Uri uri=activity.getContentResolver().insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,metadata);
+        assertNotNull(uri);
+        try(java.io.OutputStream out=activity.getContentResolver().openOutputStream(uri)){image[0].compress(Bitmap.CompressFormat.PNG,100,out);}image[0].recycle();
     }
     public void testWechatRecordsCalendarQuadrantsAndMemoEditing() throws Exception {
         CredentialStore credentials=new CredentialStore(getInstrumentation().getTargetContext());

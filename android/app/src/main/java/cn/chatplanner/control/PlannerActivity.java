@@ -52,6 +52,7 @@ public final class PlannerActivity extends Activity {
         getWindow().setStatusBarColor(PAPER); getWindow().setNavigationBarColor(PAPER);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         credentials=new CredentialStore(this);
+        activeBase=credentials.server();
         if (state!=null) {
             selected=LocalDate.parse(state.getString("day",selected.toString()));
             month=YearMonth.parse(state.getString("month",month.toString()));
@@ -179,6 +180,7 @@ public final class PlannerActivity extends Activity {
         filters.addView(button(query.isEmpty()?"搜索":"搜索中 · 清除",()->{
             if (!query.isEmpty()) {query="";signature="";render();load(true);return;}
             EditText input=new EditText(this);input.setHint("标题或内容");
+            input.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(200)});
             new AlertDialog.Builder(this).setTitle("搜索备忘").setView(input).setNegativeButton("取消",null).setPositiveButton("搜索",(d,w)->{query=input.getText().toString().trim();limit=50;signature="";render();load(true);}).show();
         })); content.addView(filters); gap(content,14);
         if (records.length()==0) { LinearLayout empty=card(Color.WHITE); empty.addView(text("这里等着你的第一条备忘",17,INK,true)); gap(empty,8);empty.addView(text("在微信说“帮我记下…”，也可以点击下方写备忘。",13,MUTED,false));content.addView(empty); }
@@ -192,6 +194,10 @@ public final class PlannerActivity extends Activity {
     private void showMore() { if (more) content.addView(button("加载更多",()->{limit+=50;signature="";load(true);})); }
     private String scope() {return credentials.server()+":planner-create";}
     private void newRecord(int quadrant) {
+        if(credentials.server().isEmpty()) {
+            Toast.makeText(this,"请先连接电脑服务，再开始记录",Toast.LENGTH_SHORT).show();
+            startActivity(new Intent(this,MainActivity.class));return;
+        }
         try {
             String pending=credentials.pendingMessage(scope());
             if (!pending.isEmpty()) {

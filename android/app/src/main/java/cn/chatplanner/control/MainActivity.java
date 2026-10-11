@@ -65,7 +65,7 @@ public class MainActivity extends Activity {
         key = input(control, R.string.key_hint, true);
         keyStatus = label(R.string.key_missing, 13); control.addView(keyStatus);
         control.addView(label(R.string.model_label, 13));
-        model = new Spinner(this); model.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"deepseek-chat", "deepseek-reasoner"})); control.addView(model);
+        model = new Spinner(this); model.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"})); control.addView(model);
         save = button(control, R.string.save); save.setOnClickListener(v -> save(false));
         clear = button(control, R.string.clear_key);
         clear.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle(R.string.clear_title).setMessage(R.string.clear_message)
@@ -133,7 +133,8 @@ public class MainActivity extends Activity {
 
     private void apply(JSONObject settings, JSONObject state) {
         enabled.setChecked(settings.optBoolean("enabled", true));
-        model.setSelection("deepseek-reasoner".equals(settings.optString("model")) ? 1 : 0);
+        String configured=settings.optString("model");
+        for(int i=0;i<model.getCount();i++) if(configured.equals(model.getItemAtPosition(i))) { model.setSelection(i); break; }
         keyStatus.setText(settings.optBoolean("deepseek_key_configured") ? R.string.key_present : R.string.key_missing);
         int pending = 0;
         JSONObject queues = state.optJSONObject("queues"); JSONObject messages = queues == null ? null : queues.optJSONObject("messages");

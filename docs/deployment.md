@@ -32,7 +32,7 @@ Docker Compose 方式使用 `.env`，数据位于 `assistant-data` 持久卷。�
 
 `GET /v1/settings` 返回开关、模型、时区以及 Key 是否配置，不返回 Key。
 
-`PUT /v1/settings` 接受 `enabled`、`deepseek_api_key`、`model` 的部分更新。省略或 null 的字段保留；空字符串 Key 会清除有效 Key（包括覆盖环境注入的值）。只支持 `deepseek-chat` 和 `deepseek-reasoner`。保存成功不代表 Key 已通过供应商验证，使用 App 测试消息可验证实际分析。
+`PUT /v1/settings` 接受 `enabled`、`deepseek_api_key`、`model` 的部分更新。省略或 null 的字段保留；空字符串 Key 会清除有效 Key（包括覆盖环境注入的值）。支持 `deepseek-flash`、`deepseek-v4-flash`、`deepseek-v4-pro`；保留旧模型名仅兼容历史配置。保存成功不代表 Key 已通过供应商验证，使用 App 测试消息可验证实际分析。
 
 分析失败后，可修复配置，再对原消息调用 `POST /v1/messages/{id}/retry`。成功解析的消息不能重试，防止生成重复任务。微信回复队列与分析状态独立；可通过消息详情的 `reply` 检查回复是否失败。
 

@@ -41,3 +41,42 @@ class DesktopConfigTests(unittest.TestCase):
             c.prepare();self.assertEqual((Path(d)/'data/api-token').read_text(),token)
             with patch('desktop.controller.subprocess.run') as run:
                 c.stop();run.assert_not_called()
+
+    def test_available_current_model_is_used_for_all_agents_and_backend(self):
+        import io,json
+        from unittest.mock import MagicMock
+        for models,expected in [(['deepseek-v4-pro','deepseek-flash'],'deepseek-flash'),(['deepseek-v4-flash'],'deepseek-v4-flash'),(['deepseek-v4-pro'],'deepseek-v4-pro')]:
+            with self.subTest(models=models),tempfile.TemporaryDirectory() as d:
+                c=Controller(Path(d));c.api=MagicMock()
+                catalog=io.BytesIO(json.dumps({'data':[{'id':m} for m in models]}).encode())
+                completion=io.BytesIO(json.dumps({'choices':[{'message':{'tool_calls':[{'function':{'name':'planner_connection_check'}}]}}]}).encode())
+                with patch('desktop.controller.urllib.request.urlopen',side_effect=[catalog,completion]) as http,patch('desktop.controller.OpenClaw') as claw:
+                    c.deepseek('only-a-synthetic-key')
+                    body=json.loads(http.call_args_list[1].args[0].data)
+                    self.assertEqual(body['model'],expected)
+                    self.assertEqual(body['thinking'],{'type':'disabled'})
+                    claw.return_value.configure_deepseek.assert_called_once_with('only-a-synthetic-key',expected)
+                    self.assertEqual(c.api.call_args.args[2]['model'],expected)
+                agents=deepseek_agents({'entries':{'main':{'model':'openai/gpt-6'},'helper':{}}},'deepseek/'+expected)
+                self.assertEqual(agents['defaults']['thinkingDefault'],'off')
+                for agent in [agents['defaults'],*agents['entries'].values()]:
+                    self.assertEqual(agent['model'],{'primary':'deepseek/'+expected,'fallbacks':[]})
+                    self.assertEqual(agent['subagents']['model'],agent['model'])
+
+    def test_failed_provider_checks_do_not_change_openclaw_or_backend(self):
+        import io,json,urllib.error
+        from unittest.mock import MagicMock
+        from tools.openclaw_config import SetupError
+        tool_error=urllib.error.HTTPError('https://api.deepseek.com/chat/completions',402,'Payment required',{},None)
+        for catalog,completion,message in [
+            ({'data':[{'id':'deepseek-flash'}]},tool_error,'余额不足'),
+            ({'data':[{'id':'deepseek-flash'}]},{'choices':[]},'没有返回所需工具调用'),
+            ({'data':[{'id':'unrelated-model'}]},None,'未返回受支持'),
+            ({'data':None},None,'模型列表响应异常')]:
+            with self.subTest(message=message),tempfile.TemporaryDirectory() as d:
+                c=Controller(Path(d));c.api=MagicMock()
+                responses=[io.BytesIO(json.dumps(catalog).encode())]
+                if completion is not None:responses.append(completion if isinstance(completion,Exception) else io.BytesIO(json.dumps(completion).encode()))
+                with patch('desktop.controller.urllib.request.urlopen',side_effect=responses),patch('desktop.controller.OpenClaw') as claw:
+                    with self.assertRaisesRegex(SetupError,message):c.deepseek('only-a-synthetic-key')
+                    claw.assert_not_called();c.api.assert_not_called()

@@ -10,7 +10,8 @@ import subprocess
 import tempfile
 
 TOOLS = ['chat_planner_record', 'chat_planner_status']
-MODEL = 'deepseek/deepseek-chat'
+DEEPSEEK_MODELS = ('deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-pro', 'deepseek-chat', 'deepseek-reasoner')
+MODEL = 'deepseek/deepseek-flash'
 
 class SetupError(RuntimeError):
     pass
@@ -108,15 +109,17 @@ class OpenClaw:
         if any(name in policy.get('deny',[]) for name in [*TOOLS,'group:plugins']):restricted.append('全局工具策略')
         if restricted:raise SetupError('保存工具被禁止：'+', '.join(restricted)+'。请在 OpenClaw 中移除对应禁止项。')
         return {'tools_loaded':True,'agent_count':len(list(agent_values(agents))) or 1,'primary':agents.get('defaults',{}).get('model',{})}
-    def configure_deepseek(self,key):
+    def configure_deepseek(self,key,model_id='deepseek-flash'):
+        if model_id not in DEEPSEEK_MODELS:raise SetupError('不支持此 DeepSeek 模型，配置未修改。')
+        model_ref='deepseek/'+model_id
         if not key.strip() or '\n' in key or len(key)>512:raise SetupError('请填写有效的 DeepSeek API Key。')
-        agents=deepseek_agents(self.get('agents',{}))
+        agents=deepseek_agents(self.get('agents',{}),model_ref)
         tools=self.get('tools',{})
-        switch_reviewer(tools)
+        switch_reviewer(tools,model_ref)
         secrets=self.get('secrets.providers',{})
         secretfile=self.root/'data/openclaw-deepseek.json'
         secrets['planner-deepseek']={'source':'file','path':str(secretfile),'mode':'json'}
-        provider={'baseUrl':'https://api.deepseek.com','api':'openai-completions','apiKey':{'source':'file','provider':'planner-deepseek','id':'/key'},'models':[{'id':'deepseek-chat','name':'DeepSeek Chat','reasoning':False,'input':['text'],'contextWindow':128000,'maxTokens':8192}]}
+        provider={'baseUrl':'https://api.deepseek.com','api':'openai-completions','apiKey':{'source':'file','provider':'planner-deepseek','id':'/key'},'models':[{'id':model_id,'name':'DeepSeek '+model_id,'reasoning':model_id!='deepseek-chat','input':['text'],'contextWindow':128000,'maxTokens':8192}]}
         original=secretfile.read_bytes() if secretfile.exists() else None
         fd=os.open(secretfile,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
         with os.fdopen(fd,'w',encoding='utf-8') as f:json.dump({'key':key.strip()},f)
@@ -126,11 +129,11 @@ class OpenClaw:
             else:secretfile.write_bytes(original)
             raise
         configured=self.get('agents',{})
-        if deepseek_agents(configured)!=configured:raise SetupError('部分助手的模型设置未生效，请重新检查。')
+        if deepseek_agents(configured,model_ref)!=configured:raise SetupError('部分助手的模型设置未生效，请重新检查。')
         return len(list(agent_values(configured))) or 1
     def restart(self):
         r=self.run('gateway','restart',timeout=60)
-        if r.returncode:raise SetupError('未找到可重启的 OpenClaw 后台服务。请关闭原 OpenClaw 窗口，再点击“启动微信助手”。')
+        if r.returncode:raise SetupError('未找到可重启的 OpenClaw 后台服务。请关闭原 OpenClaw 窗口，再点击“启动全部”。')
 
 def enable_tools(policy):
     policy=copy.deepcopy(policy)
@@ -141,9 +144,9 @@ def enable_tools(policy):
     policy[path]=list(dict.fromkeys([*policy.get(path,[]),*TOOLS]))
     return policy
 
-def switch_reviewer(tools):
+def switch_reviewer(tools,model_ref=MODEL):
     reviewer=tools.get('exec',{}).get('reviewer')
-    if isinstance(reviewer,dict):reviewer['model']=MODEL
+    if isinstance(reviewer,dict):reviewer['model']=model_ref
 
 def agent_values(agents):
     for name,value in agents.get('entries',{}).items():
@@ -151,18 +154,19 @@ def agent_values(agents):
     for value in agents.get('list',[]):
         if isinstance(value,dict):yield value.get('id','unknown'),value
 
-def deepseek_agents(agents):
+def deepseek_agents(agents,model_ref=MODEL):
     agents=copy.deepcopy(agents)
     def change(agent):
-        agent['model']={'primary':MODEL,'fallbacks':[]}
-        if isinstance(agent.get('tools'),dict):switch_reviewer(agent['tools'])
-        agent.setdefault('subagents',{})['model']={'primary':MODEL,'fallbacks':[]}
-        if isinstance(agent.get('heartbeat'),dict) and 'model' in agent['heartbeat']:agent['heartbeat']['model']=MODEL
+        agent['model']={'primary':model_ref,'fallbacks':[]}
+        if isinstance(agent.get('tools'),dict):switch_reviewer(agent['tools'],model_ref)
+        agent.setdefault('subagents',{})['model']={'primary':model_ref,'fallbacks':[]}
+        if isinstance(agent.get('heartbeat'),dict) and 'model' in agent['heartbeat']:agent['heartbeat']['model']=model_ref
         # Restrict selectable chat models; old credentials remain intact for rollback.
-        if 'models' in agent:agent['models']={MODEL:agent['models'].get(MODEL,{})}
-        if isinstance(agent.get('compaction'),dict) and 'model' in agent['compaction']:agent['compaction']['model']=MODEL
+        if 'models' in agent:agent['models']={model_ref:agent['models'].get(model_ref,{})}
+        if isinstance(agent.get('compaction'),dict) and 'model' in agent['compaction']:agent['compaction']['model']=model_ref
     change(agents.setdefault('defaults',{}))
-    agents['defaults']['models']={MODEL:agents['defaults'].get('models',{}).get(MODEL,{'alias':'DeepSeek'})}
+    agents['defaults']['thinkingDefault']='off'
+    agents['defaults']['models']={model_ref:agents['defaults'].get('models',{}).get(model_ref,{'alias':'DeepSeek'})}
     for _,agent in agent_values(agents):change(agent)
     return agents
 

@@ -9,6 +9,7 @@ root=Path(__file__).resolve().parents[1];state=Path(os.environ['OPENCLAW_STATE_D
 if 'test' not in str(state).lower():raise SystemExit('Only an explicitly isolated test state may be used')
 os.environ.setdefault('XDG_CACHE_HOME',str(state.parent/'cache'))
 original=config.read_bytes();calls=[];session=uuid.uuid4().hex
+expected_model=json.loads(original)['agents']['defaults']['model']['primary'].split('/',1)[1]
 plan={'text':'今天交高数作业，重要不紧急；她喜欢茉莉花茶；2026年10月14日15点到16点高数课，二教301','interpretation':{'items':[{'kind':'todo','title':'原生工具高数作业','category':'高数','important':True,'urgent':False},{'kind':'memo','title':'原生工具喜欢的茶','category':'女朋友','body':'茉莉花茶'},{'kind':'course','title':'原生工具高数课','category':'高数','location':'二教301','starts_at':'2026-10-14T15:00:00+08:00','ends_at':'2026-10-14T16:00:00+08:00'}]}}
 class Model(BaseHTTPRequestHandler):
  def log_message(self,*args):pass
@@ -17,7 +18,7 @@ class Model(BaseHTTPRequestHandler):
   available=[t['function']['name'] for t in body.get('tools',[])]
   if 'chat_planner_record' not in available and 'tool_call' not in available: self.send_error(500,'planner tool absent');return
   used=any(m.get('role')=='tool' for m in body['messages'])
-  base={'id':'fake-completion','object':'chat.completion.chunk','created':int(time.time()),'model':'deepseek-chat'}
+  base={'id':'fake-completion','object':'chat.completion.chunk','created':int(time.time()),'model':body['model']}
   delta={'role':'assistant','content':'已按工具返回状态保存。'} if used else {'role':'assistant','tool_calls':[{'index':0,'id':'call_planner_verify','type':'function','function':{'name':'chat_planner_record' if 'chat_planner_record' in available else 'tool_call','arguments':json.dumps(plan if 'chat_planner_record' in available else {'id':'chat_planner_record','args':plan},ensure_ascii=False)}}]}
   if body.get('stream'):
    self.send_response(200);self.send_header('Content-Type','text/event-stream');self.end_headers()
@@ -45,6 +46,7 @@ with tempfile.TemporaryDirectory(prefix='planner-host-loop-') as d:
   messages=httpx.get('http://127.0.0.1:8019/v1/messages',headers=auth).json()['messages']
   if not notes:print('Synthetic tool results:',[m.get('content') for m in calls[-1].get('messages',[]) if m.get('role')=='tool'] if calls else [])
   assert result.returncode==0 and len(calls)>=2 and notes[0]['category']=='女朋友' and tasks[0]['important'] and not tasks[0]['urgent']
+  assert all(c['model']==expected_model and c.get('thinking',{}).get('type')=='disabled' for c in calls), 'Model selection or thinking-off did not reach the provider'
   message=httpx.get('http://127.0.0.1:8019/v1/messages/'+messages[0]['id'],headers=auth).json()
   assert any(t['target']=='hita' and t['status']=='blocked' for t in message['tasks'])
   print('Official OpenClaw model -> registered tool -> real backend -> categorized memo, quadrant task, HITA queue: PASSED')

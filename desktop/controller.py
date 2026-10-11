@@ -11,7 +11,7 @@ import threading
 import time
 import urllib.request
 import urllib.error
-from tools.openclaw_config import OpenClaw,SetupError,find_command,command_args,refreshed_path
+from tools.openclaw_config import OpenClaw,SetupError,find_command,command_args,refreshed_path,DEEPSEEK_MODELS
 
 BASE='http://127.0.0.1:8000'
 
@@ -50,7 +50,7 @@ class Controller:
                 try:status=self.api('/v1/status',timeout=1);break
                 except (OSError,ValueError):time.sleep(.5)
             else:raise SetupError('电脑服务没有启动成功。请先关闭旧 start-assistant 窗口，再重试；错误保存在 data/backend.log。')
-            if status.get('version')!='0.5.0' or status['integrations'].get('openclaw')!='structured_tools':raise SetupError('8000 端口正在运行旧程序，请关闭旧服务窗口再启动。')
+            if status.get('version')!='0.5.1' or status['integrations'].get('openclaw')!='structured_tools':raise SetupError('8000 端口正在运行旧程序，请关闭旧服务窗口再启动。')
             self.running=True;self.emit('state','电脑服务运行中')
             try:
                 existing=self.children.get('tunnel')
@@ -77,7 +77,7 @@ class Controller:
         agents=claw.get('agents',{})
         model=agents.get('defaults',{}).get('model',{})
         primary=model.get('primary') if isinstance(model,dict) else model
-        if primary!='deepseek/deepseek-chat':
+        if primary not in ['deepseek/'+m for m in DEEPSEEK_MODELS]:
             self.emit('wechat','请先配置 DeepSeek，尚未启动旧模型助手');return
         if self.children.get('gateway') and self.children['gateway'].poll() is None:return
         check=claw.run('gateway','status','--json',timeout=20)
@@ -110,25 +110,36 @@ class Controller:
             else:OpenClaw(self.root).restart()
         self.emit('wechat','微信助手已重启；发 /new 开始新会话，再测试记录')
     def deepseek(self,key):
+        key=key.strip()
+        if not key or any(c.isspace() for c in key) or len(key)>512:raise SetupError('请填写完整有效的 DeepSeek API Key。')
         self.prepare()
         request=urllib.request.Request('https://api.deepseek.com/models',headers={'Authorization':'Bearer '+key.strip()})
         try:
             with urllib.request.urlopen(request,timeout=20) as r:data=json.load(r)
         except urllib.error.HTTPError as e:raise SetupError('DeepSeek Key 无效或没有访问权限。' if e.code in (401,403) else 'DeepSeek 暂时无法访问，请稍后重试。') from None
         except (OSError,ValueError):raise SetupError('无法连接 DeepSeek，请检查电脑网络。') from None
-        if 'deepseek-chat' not in [m.get('id') for m in data.get('data',[])]:raise SetupError('当前 DeepSeek 账号未提供 deepseek-chat。')
+        if not isinstance(data,dict) or not isinstance(data.get('data'),list):raise SetupError('DeepSeek 模型列表响应异常，请重试；配置未修改。')
+        available={m.get('id') for m in data['data'] if isinstance(m,dict) and isinstance(m.get('id'),str)}
+        model_id=next((m for m in DEEPSEEK_MODELS if m in available),None)
+        if model_id is None:raise SetupError('账号未返回受支持的 DeepSeek 模型，请确认 Key 来自 platform.deepseek.com；配置未修改。')
+        self.emit('wechat','正在验证 '+model_id+' 的工具调用能力…')
         # Verify the same API can return the tool calls needed by WeChat recording.
-        body={'model':'deepseek-chat','messages':[{'role':'user','content':'Call planner_connection_check to verify tool support.'}],'tools':[{'type':'function','function':{'name':'planner_connection_check','description':'Test tool support only; performs no action.','parameters':{'type':'object','properties':{},'additionalProperties':False}}}],'tool_choice':{'type':'function','function':{'name':'planner_connection_check'}},'max_tokens':64}
+        body={'model':model_id,'thinking':{'type':'disabled'},'messages':[{'role':'user','content':'Call planner_connection_check to verify tool support.'}],'tools':[{'type':'function','function':{'name':'planner_connection_check','description':'Test tool support only; performs no action.','parameters':{'type':'object','properties':{},'additionalProperties':False}}}],'tool_choice':{'type':'function','function':{'name':'planner_connection_check'}},'max_tokens':256}
         req=urllib.request.Request('https://api.deepseek.com/chat/completions',headers={'Authorization':'Bearer '+key.strip(),'Content-Type':'application/json'},data=json.dumps(body).encode())
         try:
             with urllib.request.urlopen(req,timeout=30) as r:answer=json.load(r)
-        except urllib.error.HTTPError as e:raise SetupError('DeepSeek 模型调用失败，请检查 API Key、余额和账号权限。') from None
+        except urllib.error.HTTPError as e:
+            messages={401:'DeepSeek Key 无效，请在官方平台重新生成。',403:'DeepSeek 账号无访问权限。',402:'DeepSeek API 余额不足，请在官方开放平台检查余额。',404:'DeepSeek 模型暂不可用，请重试模型验证。',429:'DeepSeek 请求繁忙，请稍后重试。'}
+            raise SetupError(messages.get(e.code,'DeepSeek 模型调用失败（HTTP '+str(e.code)+'），配置未修改。')) from None
         except (OSError,ValueError):raise SetupError('DeepSeek 模型调用超时或响应异常，请重试。') from None
-        if not any(t.get('function',{}).get('name')=='planner_connection_check' for t in answer.get('choices',[{}])[0].get('message',{}).get('tool_calls',[])):raise SetupError('DeepSeek 没有返回所需工具调用，配置尚未应用。')
+        choices=answer.get('choices',[]) if isinstance(answer,dict) else []
+        message=choices[0].get('message',{}) if choices and isinstance(choices[0],dict) else {}
+        calls=message.get('tool_calls',[]) if isinstance(message,dict) else []
+        if not isinstance(calls,list) or not any(isinstance(t,dict) and isinstance(t.get('function'),dict) and t['function'].get('name')=='planner_connection_check' for t in calls):raise SetupError('DeepSeek 没有返回所需工具调用，配置尚未应用。')
         self.api('/v1/status')
-        count=OpenClaw(self.root).configure_deepseek(key)
-        self.api('/v1/settings','PUT',{'deepseek_api_key':key.strip(),'model':'deepseek-chat'})
-        self.emit('wechat',f'{count} 个助手及子助手已设置 DeepSeek，未配置 ChatGPT 回退。请重启微信助手并发 /new。')
+        count=OpenClaw(self.root).configure_deepseek(key,model_id)
+        self.api('/v1/settings','PUT',{'deepseek_api_key':key.strip(),'model':model_id})
+        self.emit('wechat',f'{count} 个助手及子助手已设置 {model_id}，未配置 ChatGPT 回退。请重启微信助手并发 /new。')
     def diagnose(self):
         lines=[]
         try:
@@ -144,8 +155,21 @@ class Controller:
             except Exception:lines.append('手机 HTTPS 通道：未能到达，请检查网络')
         else:lines.append('手机 HTTPS 通道：尚未取得地址')
         try:
-            info=OpenClaw(self.root).inspect();lines.append('OpenClaw 保存工具：已加载；默认模型：'+str(info['primary']))
+            claw=OpenClaw(self.root)
+            result=claw.run('gateway','status','--json',timeout=20)
+            gateway=json.loads(result.stdout)
+            online=isinstance(gateway,dict) and gateway.get('rpc',{}).get('ok')
+            lines.append('微信助手网关：'+('已连接' if online else '未连接，请点击启动全部'))
+            info=claw.inspect()
+            primary=info['primary']
+            primary=primary.get('primary','未配置') if isinstance(primary,dict) else primary
+            lines.append('OpenClaw 保存工具：已加载；配置模型：'+str(primary))
+            if primary not in ['deepseek/'+m for m in DEEPSEEK_MODELS]:
+                lines.append('模型尚未切换：请验证并应用 DeepSeek，再重启微信助手；微信发 /new。')
+            else:
+                lines.append('配置已保存；正在运行的旧会话仍需重启助手并发 /new，配置模型不等于本次回复模型。')
         except SetupError as e:lines.append(str(e))
+        except (ValueError,TypeError):lines.append('微信助手网关：状态响应异常，请确认 OpenClaw 版本。')
         self.emit('diagnosis','\n'.join(lines))
         return lines
     def write_test(self):

@@ -9,7 +9,7 @@ class Settings:
     api_token: str
     db_path: Path
     deepseek_key: str = ""
-    model: str = "deepseek-chat"
+    model: str = "deepseek-flash"
     timezone: str = "Asia/Shanghai"
     owner: str = "owner"
     corp_id: str = ""
@@ -33,7 +33,7 @@ class Settings:
             api_token=os.getenv("ASSISTANT_API_TOKEN", ""),
             db_path=Path(os.getenv("ASSISTANT_DB", "data/assistant.db")),
             deepseek_key=os.getenv("DEEPSEEK_API_KEY", ""),
-            model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+            model=os.getenv("DEEPSEEK_MODEL", "deepseek-flash"),
             timezone=os.getenv("ASSISTANT_TIMEZONE", "Asia/Shanghai"),
             owner=os.getenv("ASSISTANT_OWNER", "owner"),
             corp_id=os.getenv("WECHAT_CORP_ID", ""),

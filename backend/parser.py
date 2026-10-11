@@ -40,6 +40,7 @@ class DeepSeekParser:
                 headers={"Authorization": f"Bearer {settings.deepseek_key}"},
                 json={
                     "model": settings.model,
+                    "thinking": {"type":"disabled"},
                     "messages": [
                         {"role": "system", "content": prompt},
                         {"role": "user", "content": json.dumps({"history": history, "message": text}, ensure_ascii=False)},

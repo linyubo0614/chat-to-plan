@@ -12,7 +12,7 @@ def main():
     if not key: raise SystemExit("没有输入，本次未修改。")
     try:
         response=httpx.put("http://127.0.0.1:8000/v1/settings",headers={"Authorization":"Bearer "+token},
-            json={"deepseek_api_key":key,"model":"deepseek-chat"},timeout=15,follow_redirects=False)
+            json={"deepseek_api_key":key,"model":"deepseek-flash"},timeout=15,follow_redirects=False)
         response.raise_for_status()
     except Exception: raise SystemExit("保存失败，请先启动服务；本次没有发起 DeepSeek 分析请求。") from None
     print("API Key 已在本机服务加密保存；这一步未发起模型调用，不代表 Key 或余额已经验证。")

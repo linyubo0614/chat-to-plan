@@ -60,6 +60,13 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(self.submit("   ","blank").status_code,422)
         self.assertEqual(self.submit("x"*8001,"large").status_code,422)
 
+    def test_current_deepseek_model_is_preserved_in_phone_settings(self):
+        for model in ['deepseek-flash','deepseek-v4-flash','deepseek-v4-pro']:
+            response=self.client.put('/v1/settings',headers=self.headers,json={'model':model})
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(self.client.get('/v1/settings',headers=self.headers).json()['model'],model)
+        self.assertEqual(self.client.put('/v1/settings',headers=self.headers,json={'model':'openai/gpt-6'}).status_code,422)
+
     def test_app_settings_pause_resume_and_encrypted_key_persistence(self):
         secret = "sk-test-credential-never-returned"
         self.assertEqual(self.client.put("/v1/settings",json={"enabled":False}).status_code,401)

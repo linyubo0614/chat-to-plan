@@ -13,7 +13,7 @@ from .models import StrictModel
 class SettingsUpdate(StrictModel):
     enabled: bool | None = None
     deepseek_api_key: str | None = Field(default=None,max_length=512)
-    model: str | None = Field(default=None,pattern=r"^deepseek-(chat|reasoner)$")
+    model: str | None = Field(default=None,pattern=r"^deepseek-(flash|v4-flash|v4-pro|chat|reasoner)$")
 
 
 class Runtime:

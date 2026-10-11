@@ -77,11 +77,11 @@ jobs:
             $Updated = Get-Content $env:OPENCLAW_CONFIG_PATH -Raw | ConvertFrom-Json
             python scripts/verify_openclaw_host.py
             if ($LASTEXITCODE -ne 0) { throw 'Official model-tool-backend loop failed' }
-            if ($Updated.agents.defaults.model.primary -ne 'deepseek/deepseek-chat') { throw 'Default model not DeepSeek' }
+            if ($Updated.agents.defaults.model.primary -ne 'deepseek/deepseek-flash') { throw 'Default model not DeepSeek' }
             $Agents = @($Updated.agents.list)
             if ($Updated.agents.entries) { $Agents = @($Updated.agents.entries.PSObject.Properties | ForEach-Object { $_.Value }) }
             foreach ($Agent in $Agents) {
-              if ($Agent.model.primary -ne 'deepseek/deepseek-chat' -or $Agent.subagents.model.primary -ne 'deepseek/deepseek-chat') { throw 'Agent override still uses old model' }
+              if ($Agent.model.primary -ne 'deepseek/deepseek-flash' -or $Agent.subagents.model.primary -ne 'deepseek/deepseek-flash') { throw 'Agent override still uses old model' }
               if ($Agent.tools.allow -and $Agent.tools.allow -notcontains 'chat_planner_record') { throw 'Agent tool policy blocks recording' }
             }
 

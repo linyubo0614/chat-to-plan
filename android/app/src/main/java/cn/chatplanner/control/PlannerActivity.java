@@ -123,7 +123,7 @@ public final class PlannerActivity extends Activity {
     private void renderTasks() {
         LinearLayout calendar=card(Color.WHITE); LinearLayout title=row();
         title.addView(monthArrow("‹",()->moveMonth(-1))); TextView heading=text(month.getYear()+" 年 "+month.getMonthValue()+" 月 "+(calendarExpanded?"▴":"▾"),17,INK,true);
-        heading.setGravity(Gravity.CENTER);heading.setPadding(0,dp(10),0,dp(10));heading.setOnClickListener(v->{calendarExpanded=!calendarExpanded;render();notice.setText("已连接 · 点击日期查看任务");});
+        heading.setGravity(Gravity.CENTER);heading.setPadding(0,dp(10),0,dp(10));heading.setOnClickListener(v->{calendarExpanded=!calendarExpanded;render();notice.setText("点击日期查看当天任务");});
         weight(title,heading);title.addView(monthArrow("›",()->moveMonth(1)));calendar.addView(title);gap(calendar,8);
         LinearLayout weekdays=row(); for (String label:new String[]{"一","二","三","四","五","六","日"}) {
             TextView cell=text(label,12,MUTED,false); cell.setGravity(Gravity.CENTER); weight(weekdays,cell);

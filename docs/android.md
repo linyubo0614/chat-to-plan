@@ -1,3 +1,5 @@
+> 0.6.0 新增“扫码连接电脑”和“一键配置 HITA”。固定 workers.dev 地址与设备凭据持久保存，正常重启无需重新扫码。详情见 [Windows 步骤](windows.md)。
+
 # 安卓控制 App
 
 源代码位于 `android/`，原生 Java UI，没有第三方 Android 运行时依赖。需要 JDK 17 或 21、Android SDK Platform 35、Build Tools 35.0.0 和 Gradle 8.11.1。

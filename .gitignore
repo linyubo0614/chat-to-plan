@@ -20,5 +20,7 @@ android/local.properties
 *.jks
 *.keystore
 .build-cache/
+node_modules/
+.wrangler/
 .wheelhouse/
 !downloads/chat-planner-0.1.0-debug.apk

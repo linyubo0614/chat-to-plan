@@ -17,7 +17,7 @@ BASE='http://127.0.0.1:8000'
 
 class Controller:
     def __init__(self,root,emit=lambda kind,value:None):
-        self.root=Path(root).resolve();self.emit=emit;self.children={};self.handles=[];self.address='';self.running=False;self.lock=threading.RLock()
+        self.root=Path(root).resolve();self.emit=emit;self.children={};self.handles=[];self.address='';self.running=False;self.lock=threading.RLock();self.relay=None
     def prepare(self):
         data=self.root/'data';data.mkdir(exist_ok=True)
         if os.name=='nt':
@@ -39,7 +39,7 @@ class Controller:
         p=subprocess.Popen(args,cwd=self.root,env={**os.environ,'PATH':refreshed_path(),**(env or {})},stdout=out,stderr=subprocess.STDOUT,creationflags=0x08000000 if os.name=='nt' else 0)
         self.children[name]=p
         return p
-    def start(self,with_wechat=True):
+    def start(self,with_wechat=False):
         with self.lock:
             self.prepare();self.emit('state','正在启动电脑服务…')
             try:self.api('/v1/status')
@@ -50,18 +50,41 @@ class Controller:
                 try:status=self.api('/v1/status',timeout=1);break
                 except (OSError,ValueError):time.sleep(.5)
             else:raise SetupError('电脑服务没有启动成功。请先关闭旧 start-assistant 窗口，再重试；错误保存在 data/backend.log。')
-            if status.get('version')!='0.5.1' or status['integrations'].get('openclaw')!='structured_tools':raise SetupError('8000 端口正在运行旧程序，请关闭旧服务窗口再启动。')
+            if status.get('version')!='0.6.0' or status['integrations'].get('harness')!='structured_tools':raise SetupError('8000 端口正在运行旧程序，请关闭旧服务窗口再启动。')
             self.running=True;self.emit('state','电脑服务运行中')
-            try:
-                existing=self.children.get('tunnel')
-                if existing is None or existing.poll() is not None:
-                    tunnel=self.child('tunnel',[find_command('cloudflared'),'tunnel','--no-autoupdate','--url',BASE],pipe=True)
-                    threading.Thread(target=self.read_tunnel,args=(tunnel,),daemon=True).start()
-            except SetupError as e:self.emit('error',str(e))
+            relay_path=self.root/'data/relay.json'
+            relay_config=json.loads(relay_path.read_text(encoding='utf-8')) if relay_path.exists() else {}
+            if relay_config.get('address'):
+                from desktop.relay import RelayConnector
+                if self.relay is None:
+                    self.relay=RelayConnector(relay_config['address'],relay_config['secret'],self.emit)
+                    self.relay.start()
+                self.address=relay_config['address'];self.emit('address',self.address)
+            else:
+                self.emit('tunnel','请先配置免费固定中转，再生成手机配对二维码')
             if with_wechat:
                 try:self.start_gateway()
                 except SetupError as e:self.emit('error',str(e))
             return status
+    def setup_relay(self):
+        if self.running:raise SetupError('请先停止服务，再配置固定中转。')
+        self.prepare()
+        from tools.relay_setup import deploy
+        self.address=deploy(self.root,self.emit);self.emit('address',self.address)
+
+    def pairing(self):
+        if not self.address:raise SetupError('请先配置固定中转并启动服务。')
+        from urllib.parse import quote
+        ticket=self.api('/v1/pairings','POST',{'label':'对话计划扫码'})
+        value='chatplanner://pair?server='+quote(self.address,safe='')+'#'+ticket['code']
+        self.emit('pairing',{'link':value,'expires_at':ticket['expires_at']})
+
+    def export_harness(self):
+        self.prepare()
+        from tools.harness_config import export_config
+        path=export_config(self.root)
+        self.emit('diagnosis','Harness 配置已生成：'+str(path)+'\n按 docs/harness.md 把生成的 patch 加入现有 Harness 启动配置。无需再次填写模型 Key。')
+
     def read_tunnel(self,p):
         connected=False
         for raw in iter(p.stdout.readline,b''):
@@ -97,6 +120,7 @@ class Controller:
             except subprocess.TimeoutExpired:p.kill();p.wait()
     def stop(self):
         with self.lock:
+            if self.relay:self.relay.stop();self.relay=None
             for name in ['gateway','tunnel','backend']:self.stop_child(name)
             for f in self.handles:f.close()
             self.handles=[];self.address='';self.running=False;self.emit('state','已停止本软件启动的服务')
@@ -145,6 +169,7 @@ class Controller:
         try:
             status=self.api('/v1/status');lines.append('电脑服务：正常；自动处理：'+('开启' if status['enabled'] else '关闭（请在手机设置开启）'))
             links=status.get('connections',{})
+            lines.append('最近 Harness 计划调用：'+str(links.get('harness') or '尚未收到'))
             lines.append('最近微信工具调用：'+str(links.get('openclaw') or '尚未收到'))
             lines.append('最近 HITA 连接：'+str(links.get('hita') or '尚未收到'))
         except (OSError,ValueError):lines.append('电脑服务：未连接，请启动')
@@ -154,6 +179,11 @@ class Controller:
                 lines.append('手机 HTTPS 通道：正常')
             except Exception:lines.append('手机 HTTPS 通道：未能到达，请检查网络')
         else:lines.append('手机 HTTPS 通道：尚未取得地址')
+        self.emit('diagnosis','\n'.join(lines))
+        return lines
+
+    def diagnose_openclaw(self):
+        lines=[]
         try:
             claw=OpenClaw(self.root)
             result=claw.run('gateway','status','--json',timeout=20)

@@ -55,6 +55,8 @@ public class MainActivity extends Activity {
         status = label(R.string.disconnected, 14); status.setTextColor(teal); root.addView(status);
 
         LinearLayout connection = card(root, R.string.connection);
+        Button pair = new Button(this); pair.setText("扫码连接电脑（只需一次）"); connection.addView(pair);
+        pair.setOnClickListener(v -> startActivity(new Intent(this, PairingActivity.class)));
         server = input(connection, R.string.server_hint, false); server.setText(credentials.server());
         token = input(connection, R.string.token_hint, true);
         connect = button(connection, R.string.connect); connect.setOnClickListener(v -> connect());
@@ -81,6 +83,8 @@ public class MainActivity extends Activity {
             try { startActivity(new Intent().setComponent(new android.content.ComponentName("cn.chatplanner.hita","cn.limpu.hita.planner.PlannerSettingsActivity"))); }
             catch(android.content.ActivityNotFoundException ex) { new AlertDialog.Builder(this).setTitle("需要 HITA 兼容版").setMessage("当前未找到兼容版连接入口。请安装发布页中的 HITA_Planner 安装包；原版 HITA 不含此入口。").setPositiveButton("知道了",null).show(); }
         });
+        Button configureHita=new Button(this);configureHita.setText("一键配置 HITA 连接");integrations.addView(configureHita);
+        configureHita.setOnClickListener(v->configureHita());
         Button shortcut=button(integrations,R.string.add_home_icon);shortcut.setOnClickListener(v->HomeShortcut.request(this));
         root.addView(label(R.string.security, 12));
         setContentView(scroll); setBusy(false);
@@ -111,6 +115,24 @@ public class MainActivity extends Activity {
         key.setEnabled(!busy && connected); enabled.setEnabled(!busy && connected); model.setEnabled(!busy && connected);
     }
     private void failed() { post(() -> { status.setText(R.string.failed); setBusy(false); }); }
+
+    private void configureHita() {
+        if (busy || connectedBase.isEmpty()) { status.setText("请先扫码或连接电脑，再配置 HITA。"); return; }
+        final String base=connectedBase, secret=connectedToken;
+        setBusy(true);status.setText("正在为 HITA 生成配对…");
+        io.execute(()->{
+            try {
+                JSONObject ticket=ApiClient.request(base,secret,"POST","/v1/pairings",new JSONObject().put("label","HITA"));
+                String code=ticket.getString("code");
+                post(()->{
+                    setBusy(false);
+                    try {startActivity(new Intent().setComponent(new android.content.ComponentName("cn.chatplanner.hita","cn.limpu.hita.planner.PlannerSettingsActivity"))
+                        .putExtra("planner_pair_server",base).putExtra("planner_pair_code",code));status.setText("请在 HITA 确认连接。");}
+                    catch(Exception e){status.setText("请先安装新版 HITA 兼容版，再点击一键配置。");}
+                });
+            } catch(Exception e){failed();}
+        });
+    }
 
     private void connect() {
         final String base;

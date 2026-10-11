@@ -25,7 +25,7 @@ final class ApiClient {
         connection.setInstanceFollowRedirects(false);
         connection.setConnectTimeout(15000); connection.setReadTimeout(15000);
         connection.setRequestMethod(method);
-        connection.setRequestProperty("Authorization", "Bearer " + token);
+        if (!token.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + token);
         connection.setRequestProperty("Accept", "application/json");
         try {
             if (payload != null) {

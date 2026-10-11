@@ -14,7 +14,7 @@
     <string name="clear_key">移除已配置的 API Key</string>
     <string name="integrations">记录到哪里</string>
     <string name="integration_default">对话计划：任务日历与分类备忘\nHITA：兼容版后台连接\n微信：使用电脑 OpenClaw / DeepSeek\nQQ：后续接入</string>
-    <string name="security">连接口令由安卓密钥库保护；API Key 经 HTTPS 发往你的服务端，加密保存，不在 App 中持久保存。微信模型在电脑连接中心配置为 DeepSeek；日历和备忘保存在自己的电脑服务。</string>
+    <string name="security">连接口令由安卓密钥库保护；API Key 经 HTTPS 发往你的服务端，加密保存，不在 App 中持久保存。微信和 QQ 模型沿用 Harness 配置；日历和备忘保存在自己的电脑服务。</string>
     <string name="disconnected">尚未连接</string>
     <string name="connecting">正在连接…</string>
     <string name="saving">正在保存…</string>
@@ -43,7 +43,7 @@
     <string name="hita">HITA</string>
     <string name="open_inbox">消息与事项</string>
     <string name="inbox_title">消息与事项</string>
-    <string name="inbox_help">查看微信整理结果，补充或取消未交付的 HITA 日程。日常在微信使用 GPT-6；此页发送消息仅用于可选的 DeepSeek 测试。</string>
+    <string name="inbox_help">查看微信整理结果，补充或取消未交付的 HITA 日程。日常在微信或 QQ 使用 DeepSeek Harness；此页发送消息仅用于可选的 DeepSeek 测试。</string>
     <string name="refresh">返回消息列表并刷新</string>
     <string name="send_message">可选：DeepSeek 测试</string>
     <string name="resume_send">继续发送上次未确认的消息</string>

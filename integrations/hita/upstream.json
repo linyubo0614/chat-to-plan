@@ -2,7 +2,7 @@
   "repository": "https://github.com/HIT-A/HITA_Android.git",
   "commit": "ea7c8147f8a5fade93dc7f4dd347ffae8a09b7a8",
   "upstream_version": "3.0.3",
-  "compatibility_version": "3.0.3-planner.2",
+  "compatibility_version": "3.0.3-planner.3",
   "application_id": "cn.chatplanner.hita",
   "license": "MIT"
 }

@@ -7,3 +7,13 @@
 GitHub checks 必须验证原生 Windows 安装及全部助手 DeepSeek 模型配置、独立 ChatPlanner.exe 的窗口启动及真实服务写入、安卓模拟器三页切换/截图许可/备忘编辑、HITA 原有测试和真实 Room 数据库写入及连接页启动。发布仅复用同一提交的成功构建。
 
 本地真实工具→服务测试不等于微信账号到 OPPO 联调。真实 DeepSeek Key 在用户电脑输入后由模型工具调用验证请求检查；云端没有用户 Key，不能声称其账号模型请求成功。桌面连接检查分别报告最近工具提交与 HITA 领取时间。
+
+## 0.6.0 Harness 与固定配对
+
+- Python 后端、配对和 MCP 工具测试：54 项通过，覆盖单次票据并发领取、过期、设备撤销、重启保持凭据、结构化计划防重复和 HITA 回执。
+- 原 OpenClaw HTTP 工具测试：8 项通过；生成 schema 与后端一致。
+- Wrangler 4.45.0 本地 workerd + 真实 WebSocket + 真实 HTTP 后端：完成扫码票据领取、授权转发、HITA 长轮询和回执、电脑断线／重启后原凭据继续使用。
+- Harness 0.2.0-rc.2 所用 MCP Client 2.0.0（自动协议协商）：发现两个工具、调用保存和状态、重复调用无重复记录。
+- 对话计划 APK、lint 与配对 instrumentation 测试 APK 本地构建通过。HITA 兼容版 APK 构建通过，425 项上游单元测试报告无失败。
+- Windows 独立主程序和 MCP 程序、安卓模拟器配对操作、HITA Room 写入交由本提交的 GitHub Actions 验证；结果以该提交的实际运行状态为准。
+- 尚未代替用户完成：Cloudflare 账号登录与真实云部署、现有个人 Harness profile、微信／QQ、OPPO 真机相机和后台连接验收。

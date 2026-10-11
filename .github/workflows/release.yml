@@ -53,8 +53,9 @@ jobs:
         run: |
           cp windows-assets/chat-planner-windows.zip release-assets/chat-planner-windows.zip
           cp windows-assets/dist/ChatPlanner.exe release-assets/ChatPlanner.exe
-          mv hita-assets/app-debug.apk release-assets/HITA_Planner_3.0.3-planner.2.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify release-assets/HITA_Planner_3.0.3-planner.2.apk
+          cp windows-assets/dist/ChatPlannerMcp.exe release-assets/ChatPlannerMcp.exe
+          mv hita-assets/app-debug.apk release-assets/HITA_Planner_3.0.3-planner.3.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify release-assets/HITA_Planner_3.0.3-planner.3.apk
           cd release-assets
           sha256sum *.apk *.zip *.exe > SHA256SUMS
       - name: Publish preview release

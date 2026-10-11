@@ -1,3 +1,5 @@
+> 0.6.0 推荐：对话计划设置 →“一键配置 HITA 连接”，在 3.0.3-planner.3 兼容版中确认即可；以下手动填写仍可作为备用方式。
+
 # HITA 兼容版
 
 你已允许维护兼容版并接受常驻通知。本版基于 MIT 授权的 [HIT-A/HITA_Android](https://github.com/HIT-A/HITA_Android)，固定源码提交见 `integrations/hita/upstream.json`。全部新增源码、构建补丁和原始许可证都保存于本仓库，可重复构建；没有修改或推送上游仓库。

@@ -81,13 +81,13 @@ class Store:
             db.execute("BEGIN IMMEDIATE")
             return self._ingest(db, source, external_id, owner, text, context or {})
 
-    def ingest_plan(self, external_id, owner, text, result: Interpretation):
+    def ingest_plan(self, external_id, owner, text, result: Interpretation, source="openclaw"):
         # Persist the original validated interpretation for retry comparison even
         # after a task is edited or cancelled. The message and tasks commit together.
         context = {"interpretation": result.model_dump(mode="json")}
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
-            row, created = self._ingest(db,"openclaw",external_id,owner,text,context)
+            row, created = self._ingest(db,source,external_id,owner,text,context)
             if created:
                 self._complete(db,row,result)
         if created and hasattr(self,"delivery_signal"):

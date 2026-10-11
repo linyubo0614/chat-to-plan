@@ -18,6 +18,7 @@ from .runtime import Runtime, SettingsUpdate
 from .store import Conflict, Store
 from .wechat import WeChatAPI, WeChatCrypto
 from .worker import Worker
+from .pairing import Pairing, PairCreate, PairClaim
 
 
 def create_app(settings=None, parser=None, run_worker=True):
@@ -26,6 +27,7 @@ def create_app(settings=None, parser=None, run_worker=True):
     planner = Planner(store)
     delivery = Delivery(store)
     runtime = Runtime(store,settings)
+    pairing = Pairing(store)
     wechat = WeChatAPI(settings) if settings.wechat_enabled else None
     crypto = WeChatCrypto(settings) if settings.wechat_enabled else None
     worker = Worker(store, parser or DeepSeekParser(settings,runtime), wechat,runtime)
@@ -37,15 +39,42 @@ def create_app(settings=None, parser=None, run_worker=True):
         yield
         worker.stop()
 
-    app = FastAPI(title="对话计划助手", version="0.5.1", lifespan=lifespan,
+    app = FastAPI(title="对话计划助手", version="0.6.0", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.store, app.state.worker, app.state.runtime = store, worker, runtime
     bearer = HTTPBearer(auto_error=False)
 
     def authorize(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)):
-        if not credentials or not hmac.compare_digest(credentials.credentials, settings.api_token):
+        if not credentials:
             raise HTTPException(401, "Invalid access token")
-        return settings.owner
+        if hmac.compare_digest(credentials.credentials, settings.api_token):
+            return settings.owner
+        owner = pairing.owner(credentials.credentials)
+        if owner is None:
+            raise HTTPException(401, "Invalid access token")
+        return owner
+
+    @app.post("/v1/pairings", status_code=201)
+    def create_pairing(body: PairCreate,response: Response,owner=Depends(authorize)):
+        response.headers["Cache-Control"] = "no-store"
+        return pairing.create(owner,body.label)
+
+    @app.post("/v1/pairings/claim")
+    def claim_pairing(body: PairClaim,response: Response):
+        response.headers["Cache-Control"] = "no-store"
+        claimed = pairing.claim(body.code,body.label)
+        if claimed is None:
+            raise HTTPException(410,"Pairing code expired or already used")
+        return claimed
+
+    @app.get("/v1/devices")
+    def devices(owner=Depends(authorize)):
+        return {"devices":pairing.devices(owner)}
+
+    @app.delete("/v1/devices/{device}")
+    def revoke_device(device: str,owner=Depends(authorize)):
+        pairing.revoke(owner,device)
+        return {"revoked":True}
 
     @app.get("/healthz")
     def health():
@@ -55,10 +84,10 @@ def create_app(settings=None, parser=None, run_worker=True):
 
     @app.get("/v1/status")
     def status(owner=Depends(authorize)):
-        return {"version":"0.5.1","deepseek_configured":runtime.public()["deepseek_key_configured"], "enabled":runtime.public()["enabled"], "wechat_configured":settings.wechat_enabled,
+        return {"version":"0.6.0","deepseek_configured":runtime.public()["deepseek_key_configured"], "enabled":runtime.public()["enabled"], "wechat_configured":settings.wechat_enabled,
                 "wechat_allowlist_configured":bool(settings.allowed_users),
                 "server_time":datetime.now(ZoneInfo(settings.timezone)).isoformat(),
-                "integrations":{"planner":"calendar_quadrants_and_memos", "hita":"compatible_bridge_unverified", "openclaw":"structured_tools", "qq":"deferred"},
+                "integrations":{"planner":"calendar_quadrants_and_memos", "hita":"compatible_bridge_unverified", "openclaw":"structured_tools", "harness":"structured_tools", "qq":"via_dsh_im"},
                 "queues":store.counts(),"connections":store.connections(owner)}
 
     @app.get("/v1/settings")
@@ -79,20 +108,27 @@ def create_app(settings=None, parser=None, run_worker=True):
             raise HTTPException(409, str(exc)) from exc
         return {"id":row["id"], "status":row["status"], "duplicate":not created}
 
-    @app.post("/v1/openclaw/plans", status_code=201)
-    def submit_plan(plan: OpenClawPlan,response: Response,owner=Depends(authorize)):
+    def save_plan(plan, response, owner, source):
         if not runtime.public()["enabled"]:
             raise HTTPException(423,"Assistant is paused; no plan was accepted")
         try:
-            key,created = store.ingest_plan(plan.message_id,owner,plan.text,plan.interpretation)
+            key,created = store.ingest_plan(plan.message_id,owner,plan.text,plan.interpretation,source=source)
         except Conflict as exc:
             raise HTTPException(409,str(exc)) from exc
         if not created:
             response.status_code = 200
-        store.touch_connection(owner,"openclaw")
+        store.touch_connection(owner,source)
         delivery.signal()
         return {"id":key,"duplicate":not created,"message":store.get_message(key,owner),
                 "delivery_notice":"备忘和待办已保存到对话计划，手机联网后可查看；HITA 须等待目标端写入并读回确认。"}
+
+    @app.post("/v1/openclaw/plans", status_code=201)
+    def submit_plan(plan: OpenClawPlan,response: Response,owner=Depends(authorize)):
+        return save_plan(plan,response,owner,"openclaw")
+
+    @app.post("/v1/harness/plans", status_code=201)
+    def submit_harness_plan(plan: OpenClawPlan,response: Response,owner=Depends(authorize)):
+        return save_plan(plan,response,owner,"harness")
 
     @app.post("/v1/planner/records",status_code=201)
     def create_record(body: PlannerCreate,response: Response,owner=Depends(authorize)):

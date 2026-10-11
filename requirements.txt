@@ -4,3 +4,6 @@ httpx==0.28.1
 pydantic==2.13.4
 cryptography==46.0.3
 defusedxml==0.7.1
+qrcode==8.2
+websocket-client==1.9.0
+PyYAML==6.0.3

@@ -1,3 +1,2 @@
-* text=auto
-*.bat text eol=crlf
-*.jar binary
+# Diff context lines intentionally retain their prefix, including empty lines.
+integrations/hita/upstream.patch -whitespace

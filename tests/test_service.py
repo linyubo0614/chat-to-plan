@@ -6,6 +6,7 @@ import tempfile
 import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -166,7 +167,7 @@ class ServiceTests(unittest.TestCase):
     def test_existing_database_migrates_without_losing_tasks(self):
         import sqlite3
         path = Path(self.tmp.name)/"legacy.db"
-        with sqlite3.connect(path) as db:
+        with closing(sqlite3.connect(path)) as db, db:
             db.execute("CREATE TABLE tasks(id TEXT PRIMARY KEY,message_id TEXT NOT NULL,target TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL)")
             db.execute("INSERT INTO tasks VALUES('old','message','tomato','{}','blocked','waiting')")
         migrated = Store(path)

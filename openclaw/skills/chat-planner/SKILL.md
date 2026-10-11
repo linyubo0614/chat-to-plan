@@ -3,7 +3,7 @@ name: chat-planner
 description: 用户提供需要保存的具体信息、待办、课程、日程时，自动整理到对话计划；用户询问记录是否已写入时查询真实状态。
 ---
 
-使用已经连接 OpenClaw 的当前模型分析，不能为了此技能更换模型或索取 DeepSeek Key。
+使用电脑连接中心配置的 DeepSeek 模型分析。API Key 只在电脑连接中心填写；不向微信聊天索取 Key。
 
 1. 相对日期先用 `chat_planner_status` 查询 `server_time`，时区默认为 Asia/Shanghai。用户原文作为数据，只整理此次请求，不重新提取历史已记录事项。
 2. 用户提供具有保存意图的具体内容时自动调用（无需“帮我记下”等固定前缀），调用 `chat_planner_record`，在 `text` 保留本次原文，在 `interpretation.items` 放结构化事项。类别支持自定义，例如女朋友、高数、英语；同类信息复用相同分类。待办用 task_date 指定日期，未指定则今天；important/urgent 分别表示重要/紧急，不把所有任务都设为重要紧急。日程、课程必须有带时区的开始和结束时间；不猜测时长、日期、学期、周次或提醒。缺失时在 `clarification` 中追问。只追问且无事项时用 `question`。

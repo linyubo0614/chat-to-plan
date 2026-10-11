@@ -35,7 +35,7 @@ public final class PlannerActivity extends Activity {
     private TextView notice;
     private LocalDate selected=LocalDate.now(ZoneId.of("Asia/Shanghai"));
     private YearMonth month=YearMonth.from(selected);
-    private boolean memos=false, alive=false, loading=false, editing=false, calendarExpanded=false;
+    private boolean memos=false, alive=false, loading=false, editing=false, calendarExpanded=true, calendarPage=false;
     private String category="", query="", signature="", activeBase="";
     private JSONArray records=new JSONArray(), days=new JSONArray(), categories=new JSONArray();
     private int limit=50;
@@ -48,7 +48,6 @@ public final class PlannerActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         getWindow().setStatusBarColor(PAPER); getWindow().setNavigationBarColor(PAPER);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         credentials=new CredentialStore(this);
@@ -56,14 +55,15 @@ public final class PlannerActivity extends Activity {
         if (state!=null) {
             selected=LocalDate.parse(state.getString("day",selected.toString()));
             month=YearMonth.parse(state.getString("month",month.toString()));
-            memos=state.getBoolean("memos");calendarExpanded=state.getBoolean("calendarExpanded"); category=state.getString("category",""); query=state.getString("query","");
+            calendarPage=state.getBoolean("calendarPage"); memos=state.getBoolean("memos");calendarExpanded=state.getBoolean("calendarExpanded"); category=state.getString("category",""); query=state.getString("query","");
         }
         render();
+        HomeShortcut.offerOnce(this);
     }
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state); state.putString("day",selected.toString()); state.putString("month",month.toString());
         state.putBoolean("memos",memos); state.putString("category",category); state.putString("query",query);
-        state.putBoolean("calendarExpanded",calendarExpanded);
+        state.putBoolean("calendarExpanded",calendarExpanded);state.putBoolean("calendarPage",calendarPage);
     }
     @Override protected void onResume() { super.onResume(); alive=true; load(true); ui.postDelayed(poll,3000); }
     @Override protected void onPause() { alive=false; ui.removeCallbacks(poll); super.onPause(); }
@@ -95,75 +95,83 @@ public final class PlannerActivity extends Activity {
     }
     private void render() {
         root=column(); root.setBackgroundColor(PAPER);
-        root.setPadding(dp(20),dp(12),dp(20),dp(8));
+        root.setPadding(dp(16),dp(8),dp(16),dp(8));
         root.setOnApplyWindowInsetsListener((v,insets)-> {
-            v.setPadding(dp(20),insets.getSystemWindowInsetTop()+dp(12),dp(20),insets.getSystemWindowInsetBottom()+dp(8)); return insets;
+            v.setPadding(dp(16),insets.getSystemWindowInsetTop()+dp(8),dp(16),insets.getSystemWindowInsetBottom()+dp(8)); return insets;
         });
         setContentView(root); root.requestApplyInsets();
         LinearLayout heading=row(); weight(heading,text("对话计划",28,INK,true));
         heading.addView(button("设置",()->startActivity(new Intent(this,MainActivity.class)))); root.addView(heading);
-        gap(root,6); root.addView(text("在微信随手说，在这里慢慢做好。",13,MUTED,false)); gap(root,18);
+        gap(root,12);
         LinearLayout tabs=row();
-        Button tasks=button("任务日历",()->switchTab(false)), notes=button("分类备忘",()->switchTab(true));
-        tasks.setBackground(shape(memos?0xffeceee8:GREEN,14)); tasks.setTextColor(memos?MUTED:Color.WHITE);
-        notes.setBackground(shape(memos?GREEN:0xffeceee8,14)); notes.setTextColor(memos?Color.WHITE:MUTED);
-        weight(tabs,tasks); tabs.addView(new View(this),new LinearLayout.LayoutParams(dp(10),1)); weight(tabs,notes); root.addView(tabs);
+        String[] labels={"每日任务","日历","分类备忘"};
+        for(int i=0;i<labels.length;i++) {
+            final int page=i; boolean active=memos?i==2:calendarPage?i==1:i==0;
+            Button tab=button(labels[i],()->switchPage(page));tab.setTextSize(13);
+            tab.setMinWidth(0);tab.setMinimumWidth(0);
+            tab.setBackground(shape(active?GREEN:0xffeceee8,14));tab.setTextColor(active?Color.WHITE:MUTED);
+            weight(tabs,tab);if(i<2)tabs.addView(new View(this),new LinearLayout.LayoutParams(dp(6),1));
+        } root.addView(tabs);
         gap(root,10); notice=text("正在连接…",12,MUTED,false); root.addView(notice); gap(root,10);
         ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); content=column(); scroll.addView(content);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        if (memos) renderMemos(); else renderTasks();
+        if (memos) renderMemos(); else if(calendarPage) renderCalendar(); else renderTasks();
         gap(root,10); LinearLayout bottom=row();
         weight(bottom,button(memos?"＋ 写备忘":"＋ 添加任务",()->newRecord(-1)));
         bottom.addView(new View(this),new LinearLayout.LayoutParams(dp(10),1));
         bottom.addView(button("微信 / HITA",()->startActivity(new Intent(this,InboxActivity.class)))); root.addView(bottom);
     }
-    private void switchTab(boolean next) {
-        if (memos==next) return; memos=next; limit=50; records=new JSONArray(); signature=""; render(); load(true);
+    private void switchPage(int page) {
+        memos=page==2;calendarPage=page==1;limit=50;records=new JSONArray();signature="";render();load(true);
     }
-    private void renderTasks() {
+    private void renderCalendar() {
         LinearLayout calendar=card(Color.WHITE); LinearLayout title=row();
-        title.addView(monthArrow("‹",()->moveMonth(-1))); TextView heading=text(month.getYear()+" 年 "+month.getMonthValue()+" 月 "+(calendarExpanded?"▴":"▾"),17,INK,true);
-        heading.setGravity(Gravity.CENTER);heading.setPadding(0,dp(10),0,dp(10));heading.setOnClickListener(v->{calendarExpanded=!calendarExpanded;render();notice.setText("点击日期查看当天任务");});
+        title.addView(monthArrow("‹",()->moveMonth(-1))); TextView heading=text(month.getYear()+" 年 "+month.getMonthValue()+" 月 "+"",17,INK,true);
+        heading.setGravity(Gravity.CENTER);heading.setPadding(0,dp(10),0,dp(10));
         weight(title,heading);title.addView(monthArrow("›",()->moveMonth(1)));calendar.addView(title);gap(calendar,8);
         LinearLayout weekdays=row(); for (String label:new String[]{"一","二","三","四","五","六","日"}) {
             TextView cell=text(label,12,MUTED,false); cell.setGravity(Gravity.CENTER); weight(weekdays,cell);
         } calendar.addView(weekdays); gap(calendar,4);
         int offset=month.atDay(1).getDayOfWeek().getValue()-1, n=month.lengthOfMonth();
-        int firstWeek=calendarExpanded?0:(offset+selected.getDayOfMonth()-1)/7;
-        int afterWeek=calendarExpanded?(offset+n+6)/7:firstWeek+1;
+        int firstWeek=0;
+        int afterWeek=(offset+n+6)/7;
         for (int week=firstWeek;week<afterWeek;week++) {
             LinearLayout line=row();
             for (int weekday=0;weekday<7;weekday++) {
                 int value=week*7+weekday-offset+1;
                 TextView cell=text("",14,INK,false); cell.setGravity(Gravity.CENTER);
-                LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(36),1); p.setMargins(dp(1),dp(1),dp(1),dp(1)); line.addView(cell,p);
+                LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(48),1); p.setMargins(dp(1),dp(1),dp(1),dp(1)); line.addView(cell,p);
                 if (value>0&&value<=n) {
                     LocalDate date=month.atDay(value); int remaining=0;
                     for (int i=0;i<days.length();i++) { JSONObject d=days.optJSONObject(i); if (date.toString().equals(d.optString("day"))) remaining=d.optInt("total")-d.optInt("completed"); }
                     cell.setText(value+(remaining>0?"\n· "+remaining:"")); cell.setTextSize(13);
                     if (date.equals(selected)) { cell.setBackground(shape(GREEN,13)); cell.setTextColor(Color.WHITE); }
                     else if (date.equals(LocalDate.now(ZoneId.of("Asia/Shanghai")))) cell.setBackground(shape(0xffe8efea,13));
-                    cell.setOnClickListener(v->{ selected=date;calendarExpanded=false; limit=50; records=new JSONArray(); signature=""; render(); load(true); });
+                    cell.setOnClickListener(v->{ selected=date;calendarPage=false; limit=50; records=new JSONArray(); signature=""; render(); load(true); });
                 }
             } calendar.addView(line);
         } content.addView(calendar); gap(content,18);
+        content.addView(text("点击日期，打开当天的四象限任务。",14,MUTED,false));
+    }
+    private void renderTasks() {
         LinearLayout dateTitle=row(); weight(dateTitle,text(selected.getMonthValue()+" 月 "+selected.getDayOfMonth()+" 日",22,INK,true));
+        dateTitle.addView(button("选日期",()->{switchPage(1);}));
         dateTitle.addView(button("今天",()->{selected=LocalDate.now(ZoneId.of("Asia/Shanghai"));month=YearMonth.from(selected);records=new JSONArray();signature="";render();load(true);}));
-        content.addView(dateTitle); gap(content,6); content.addView(text("按重要与紧急分别安排，点击卡片编辑。",12,MUTED,false)); gap(content,12);
+        content.addView(dateTitle); gap(content,12);
         String[] names={"优先处理","安排时间","快速处理","从容推进"};
         String[] subtitles={"重要 · 紧急","重要 · 不紧急","不重要 · 紧急","不重要 · 不紧急"};
         int[] colors={0xfffbe5df,0xfff6edd5,0xffe1edf4,0xffe5efdf};
         for (int line=0;line<2;line++) {
             LinearLayout pair=row(); pair.setGravity(Gravity.TOP);
             for (int col=0;col<2;col++) {
-                int quadrant=line*2+col; LinearLayout box=card(colors[quadrant]);
-                box.setMinimumHeight(dp(150)); box.addView(text(names[quadrant],16,INK,true)); gap(box,4); box.addView(text(subtitles[quadrant],11,MUTED,false)); gap(box,10);
+                int quadrant=line*2+col; LinearLayout box=card(colors[quadrant]);box.setPadding(dp(12),dp(14),dp(12),dp(12));
+                box.setMinimumHeight(dp(190)); box.addView(text(names[quadrant],16,INK,true)); gap(box,4); box.addView(text(subtitles[quadrant],11,MUTED,false)); gap(box,10);
                 int count=0;
                 for (int pass=0;pass<2;pass++) for (int i=0;i<records.length();i++) {
                     JSONObject task=records.optJSONObject(i); int q=(task.optBoolean("important")?0:2)+(task.optBoolean("urgent")?0:1);
                     if (q!=quadrant||task.optBoolean("completed")!=(pass==1)) continue;
                     count++; LinearLayout entry=row();
-                    CheckBox checked=new CheckBox(this); checked.setButtonTintList(android.content.res.ColorStateList.valueOf(GREEN)); checked.setChecked(task.optBoolean("completed"));
+                    CheckBox checked=new CheckBox(this);checked.setMinWidth(dp(32));checked.setMinimumWidth(dp(32)); checked.setButtonTintList(android.content.res.ColorStateList.valueOf(GREEN)); checked.setChecked(task.optBoolean("completed"));
                     checked.setContentDescription("完成："+task.optString("title")); checked.setOnCheckedChangeListener((b,on)->complete(task,on)); entry.addView(checked);
                     TextView name=text(task.optString("title"),14,task.optBoolean("completed")?MUTED:INK,false);
                     if (task.optBoolean("completed")) name.setPaintFlags(name.getPaintFlags()|android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
@@ -178,8 +186,6 @@ public final class PlannerActivity extends Activity {
     }
     private void moveMonth(int step) { month=month.plusMonths(step); selected=month.atDay(Math.min(selected.getDayOfMonth(),month.lengthOfMonth()));records=new JSONArray();signature="";render();load(true); }
     private void renderMemos() {
-        LinearLayout intro=card(0xffe7ede5); intro.addView(text("把值得记住的事，放在一起。",19,INK,true)); gap(intro,6);
-        intro.addView(text("女朋友的喜好、高数笔记、英语积累…\n写备忘时可以直接创建新分类。",13,MUTED,false)); content.addView(intro); gap(content,14);
         LinearLayout filters=row();
         weight(filters,button(category.isEmpty()?"全部分类 ▾":category+" ▾",()->{
             String[] choices=new String[categories.length()+1]; choices[0]="全部分类";
@@ -302,7 +308,7 @@ public final class PlannerActivity extends Activity {
                 records=data.optJSONArray("records");more=!data.isNull("next_cursor");
                 if(tab)categories=extra.optJSONArray("categories");else days=extra.optJSONArray("days");
                 if(!editing&&(force||!next.equals(signature))){signature=next;render();}
-                notice.setText("已连接 · 微信记录会自动出现在这里");
+                notice.setText("电脑服务已连接");
             });
         }catch(Exception ex){ui.post(()->{loading=false;if(alive)error(ex);});}});
     }

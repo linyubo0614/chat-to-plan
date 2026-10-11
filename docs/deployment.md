@@ -53,7 +53,7 @@ Docker Compose 方式使用 `.env`，数据位于 `assistant-data` 持久卷。�
 
 ## 自有日历与分类备忘
 
-微信 OpenClaw 当前模型通过 `POST /v1/openclaw/plans` 提交已结构化内容，不需要 DeepSeek Key，不进行第二次模型调用。一次消息及其待办、备忘在同一事务中提交。课程、日程保留 HITA 租约交付。
+微信 OpenClaw 当前模型通过 `POST /v1/openclaw/plans` 提交已结构化内容，模型 Key 在电脑连接中心配置，不进行第二次模型调用。一次消息及其待办、备忘在同一事务中提交。课程、日程保留 HITA 租约交付。
 
 - `POST /v1/planner/records`：新增，要求客户端稳定的 32 位十六进制 `record_id`。相同编号和原始内容重试返回当前记录，不覆盖后来编辑，不复活已删除记录；内容不同返回409。
 - `GET /v1/planner/records?kind=todo&day=2026-10-12`：当天任务。`kind=memo` 支持 `category` 和 `q` 搜索；分页使用 `limit`（1–200）及 `before=next_cursor`。

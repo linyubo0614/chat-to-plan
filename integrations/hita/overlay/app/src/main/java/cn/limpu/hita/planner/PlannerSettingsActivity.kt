@@ -13,7 +13,6 @@ import cn.limpu.hita.R
 class PlannerSettingsActivity: Activity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
-        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE,WindowManager.LayoutParams.FLAG_SECURE)
         val scroll=ScrollView(this); val root=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(24,24,24,24) }; scroll.addView(root)
         scroll.setOnApplyWindowInsetsListener { v,insets ->
             v.setPadding(insets.systemWindowInsetLeft,insets.systemWindowInsetTop,insets.systemWindowInsetRight,insets.systemWindowInsetBottom); insets

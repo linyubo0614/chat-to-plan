@@ -13,8 +13,8 @@
     <string name="save">保存设置</string>
     <string name="clear_key">移除已配置的 API Key</string>
     <string name="integrations">记录到哪里</string>
-    <string name="integration_default">对话计划：任务日历与分类备忘\nHITA：兼容版后台连接\n微信：使用现有 OpenClaw / GPT-6\nQQ：后续接入</string>
-    <string name="security">连接口令由安卓密钥库保护；API Key 经 HTTPS 发往你的服务端，加密保存，不在 App 中持久保存。微信使用 OpenClaw 当前模型；日历和备忘保存在自己的电脑服务。</string>
+    <string name="integration_default">对话计划：任务日历与分类备忘\nHITA：兼容版后台连接\n微信：使用电脑 OpenClaw / DeepSeek\nQQ：后续接入</string>
+    <string name="security">连接口令由安卓密钥库保护；API Key 经 HTTPS 发往你的服务端，加密保存，不在 App 中持久保存。微信模型在电脑连接中心配置为 DeepSeek；日历和备忘保存在自己的电脑服务。</string>
     <string name="disconnected">尚未连接</string>
     <string name="connecting">正在连接…</string>
     <string name="saving">正在保存…</string>
@@ -82,4 +82,6 @@
     <string name="state_delivering">等待目标端确认</string>
     <string name="state_written">已保存 / 目标端已确认</string>
     <string name="retry_delivery">重试未确认的交付（等待当前尝试结束）</string>
+    <string name="open_hita_connection">打开 HITA 连接设置</string>
+    <string name="add_home_icon">添加桌面图标</string>
 </resources>

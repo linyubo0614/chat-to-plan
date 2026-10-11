@@ -61,6 +61,21 @@ class OpenClawTests(unittest.TestCase):
         self.assertEqual(restored.state.store.get_message(result["id"],"owner")["status"],"parsed")
         self.assertIn("+08:00",self.client.get("/v1/status",headers=self.headers).json()["server_time"])
 
+    def test_hita_wait_is_woken_by_a_wechat_tool_submission_and_connections_are_visible(self):
+        import time
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future=pool.submit(lambda:self.client.post("/v1/delivery/hita/claim?wait=5",headers=self.headers,json={"client_id":"phone-test"}))
+            deadline=time.monotonic()+2
+            while "hita" not in self.client.get("/v1/status",headers=self.headers).json()["connections"]:
+                if time.monotonic()>deadline:self.fail("HITA claim did not start")
+                time.sleep(.02)
+            started=time.monotonic();self.submit()
+            result=future.result(timeout=2)
+            self.assertLess(time.monotonic()-started,2)
+        self.assertEqual(result.status_code,200);self.assertIsNotNone(result.json()["task"])
+        links=self.client.get("/v1/status",headers=self.headers).json()["connections"]
+        self.assertIn("openclaw",links);self.assertIn("hita",links)
+
     def test_concurrent_retry_and_conflicting_contents(self):
         with ThreadPoolExecutor(max_workers=8) as pool:
             responses = list(pool.map(lambda _:self.submit(),range(12)))

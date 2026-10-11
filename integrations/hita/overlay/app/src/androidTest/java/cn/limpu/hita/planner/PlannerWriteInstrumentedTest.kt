@@ -26,6 +26,19 @@ class PlannerWriteInstrumentedTest {
     @After fun close() { db.close() }
     private fun task()=JSONObject("""{"id":"calendar-task-1","payload":{"kind":"course","title":"高数","location":"A101","starts_at":"2026-10-14T15:00:00+08:00","ends_at":"2026-10-14T16:00:00+08:00","clarification":null,"recurrence_description":"","reminder_minutes":null}}""")
 
+    @Test fun connectionScreenCanBeOpenedFromAnotherApp() {
+        val instrumentation=InstrumentationRegistry.getInstrumentation()
+        val context=instrumentation.targetContext
+        val intent=android.content.Intent(context,PlannerSettingsActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        val activity=instrumentation.startActivitySync(intent)
+        try {
+            assertEquals(PlannerSettingsActivity::class.java.name,activity.javaClass.name)
+            val entry=context.packageManager.getActivityInfo(android.content.ComponentName(context,PlannerSettingsActivity::class.java),0)
+            assertTrue(entry.exported)
+            assertEquals(0,activity.window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        } finally { instrumentation.runOnMainSync { activity.finish() } }
+    }
+
     @Test fun courseIsVisibleInRoomAndRetryDoesNotDuplicate() {
         val id=sync.writeAndReadback("https://planner.example",task())
         assertEquals(id,sync.writeAndReadback("https://planner.example",task()))

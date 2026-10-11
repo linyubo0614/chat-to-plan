@@ -67,18 +67,15 @@ public class PlannerInstrumentedTest extends InstrumentationTestCase {
     public void testWechatRecordsCalendarQuadrantsAndMemoEditing() throws Exception {
         CredentialStore credentials=new CredentialStore(getInstrumentation().getTargetContext());
         credentials.save("http://10.0.2.2:8000",TOKEN);
+        getInstrumentation().getTargetContext().getSharedPreferences("home-icon",0).edit().putBoolean("offered",true).commit();
         activity=(PlannerActivity)getInstrumentation().startActivitySync(new Intent(getInstrumentation().getTargetContext(),PlannerActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         try {
             await("CI 微信待办");for(String label:new String[]{"优先处理","安排时间","快速处理","从容推进"})await(label);
             screenshot("calendar-quadrants");
-            getInstrumentation().runOnMainSync(()->{
-                for(View v:all(activity.getWindow().getDecorView()))if(v instanceof TextView&&((TextView)v).getText().toString().endsWith("月 ▾")){v.performClick();return;}
-                fail("Month expansion missing");
-            });getInstrumentation().waitForIdleSync();screenshot("expanded-month");
-            getInstrumentation().runOnMainSync(()->{
-                for(View v:all(activity.getWindow().getDecorView()))if(v instanceof TextView&&((TextView)v).getText().toString().endsWith("月 ▴")){v.performClick();return;}
-                fail("Month collapse missing");
-            });getInstrumentation().waitForIdleSync();
+            assertEquals("Screenshot must be permitted",0,activity.getWindow().getAttributes().flags & android.view.WindowManager.LayoutParams.FLAG_SECURE);
+            click("日历");screenshot("separate-calendar");
+            getInstrumentation().runOnMainSync(()->assertNull("Quadrants must have a separate page",find("优先处理")));
+            click("每日任务");await("CI 微信待办");
             getInstrumentation().runOnMainSync(()->{
                 for(View v:all(activity.getWindow().getDecorView()))if(v instanceof CheckBox&&"完成：CI 微信待办".contentEquals(v.getContentDescription())){v.performClick();return;}
                 fail("Completion control missing");
@@ -86,7 +83,7 @@ public class PlannerInstrumentedTest extends InstrumentationTestCase {
             boolean completed=false;
             for(int i=0;i<100&&!completed;i++){JSONArray records=api("/v1/planner/records?kind=todo").getJSONArray("records");for(int j=0;j<records.length();j++)if(records.getJSONObject(j).getString("title").equals("CI 微信待办"))completed=records.getJSONObject(j).getBoolean("completed");if(!completed)Thread.sleep(100);}
             assertTrue("Completion did not persist",completed);
-            click("分类备忘");await("喜欢的茶");await("女朋友");screenshot("classified-memos");
+            click("分类备忘");await("喜欢的茶");await("女朋友");getInstrumentation().runOnMainSync(()->assertNull(find("把值得记住的事，放在一起。")));screenshot("classified-memos");
             click("＋ 写备忘");
             getInstrumentation().waitForIdleSync();
             // The dialog window is the currently focused root.

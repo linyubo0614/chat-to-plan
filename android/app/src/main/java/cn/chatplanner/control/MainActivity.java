@@ -42,7 +42,6 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
         credentials = new CredentialStore(this);
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(Color.rgb(243, 247, 245));
         LinearLayout root = column(); root.setPadding(dp(24), dp(28), dp(24), dp(32)); scroll.addView(root);
@@ -77,6 +76,12 @@ public class MainActivity extends Activity {
         test = button(integrations, R.string.test_message); test.setOnClickListener(v -> testMessage());
         inbox = button(integrations, R.string.open_inbox);
         inbox.setOnClickListener(v -> startActivity(new Intent(this, InboxActivity.class)));
+        Button hita=button(integrations,R.string.open_hita_connection);
+        hita.setOnClickListener(v->{
+            try { startActivity(new Intent().setComponent(new android.content.ComponentName("cn.chatplanner.hita","cn.limpu.hita.planner.PlannerSettingsActivity"))); }
+            catch(android.content.ActivityNotFoundException ex) { new AlertDialog.Builder(this).setTitle("需要 HITA 兼容版").setMessage("当前未找到兼容版连接入口。请安装发布页中的 HITA_Planner 安装包；原版 HITA 不含此入口。").setPositiveButton("知道了",null).show(); }
+        });
+        Button shortcut=button(integrations,R.string.add_home_icon);shortcut.setOnClickListener(v->HomeShortcut.request(this));
         root.addView(label(R.string.security, 12));
         setContentView(scroll); setBusy(false);
         if (!credentials.server().isEmpty()) connect();

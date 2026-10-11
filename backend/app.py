@@ -37,7 +37,7 @@ def create_app(settings=None, parser=None, run_worker=True):
         yield
         worker.stop()
 
-    app = FastAPI(title="对话计划助手", version="0.4.0", lifespan=lifespan,
+    app = FastAPI(title="对话计划助手", version="0.5.0", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.store, app.state.worker, app.state.runtime = store, worker, runtime
     bearer = HTTPBearer(auto_error=False)
@@ -59,7 +59,7 @@ def create_app(settings=None, parser=None, run_worker=True):
                 "wechat_allowlist_configured":bool(settings.allowed_users),
                 "server_time":datetime.now(ZoneInfo(settings.timezone)).isoformat(),
                 "integrations":{"planner":"calendar_quadrants_and_memos", "hita":"compatible_bridge_unverified", "openclaw":"structured_tools", "qq":"deferred"},
-                "queues":store.counts()}
+                "queues":store.counts(),"connections":store.connections(owner)}
 
     @app.get("/v1/settings")
     def get_settings(owner=Depends(authorize)):
@@ -89,6 +89,8 @@ def create_app(settings=None, parser=None, run_worker=True):
             raise HTTPException(409,str(exc)) from exc
         if not created:
             response.status_code = 200
+        store.touch_connection(owner,"openclaw")
+        delivery.signal()
         return {"id":key,"duplicate":not created,"message":store.get_message(key,owner),
                 "delivery_notice":"备忘和待办已保存到对话计划，手机联网后可查看；HITA 须等待目标端写入并读回确认。"}
 
@@ -161,6 +163,7 @@ def create_app(settings=None, parser=None, run_worker=True):
     def claim_delivery(target: str, body: DeliveryClaim,wait: int = Query(default=0,ge=0,le=25),owner=Depends(authorize)):
         if target != "hita":
             raise HTTPException(404,"Unknown target")
+        store.touch_connection(owner,"hita")
         if not runtime.public()["enabled"]:
             return {"task":None,"paused":True}
         return delivery.wait_claim(target,owner,body.client_id,wait,lambda:runtime.public()["enabled"])

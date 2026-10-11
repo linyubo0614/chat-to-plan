@@ -1,13 +1,15 @@
 diff --git a/app/build.gradle b/app/build.gradle
-index ca3e65f..287579e 100644
+index ca3e65f..a1c180e 100644
 --- a/app/build.gradle
 +++ b/app/build.gradle
-@@ -12,7 +12,7 @@ def envVersionCode = System.getenv("VERSION_CODE")
+@@ -11,8 +11,8 @@ plugins {
+ def envVersionCode = System.getenv("VERSION_CODE")
  def appVersionCodeValue = (envVersionCode != null && envVersionCode.matches("\\d+"))
      ? Integer.parseInt(envVersionCode)
-     : 2026093005
+-    : 2026093005
 -def appVersionNameValue = "3.0.3"
-+def appVersionNameValue = "3.0.3-planner.1"
++    : 2026101101
++def appVersionNameValue = "3.0.3-planner.2"
  
  def keystorePropertiesFile = rootProject.file("keystore.properties")
  def keystoreProperties = new Properties()
@@ -165,6 +167,28 @@ index 0c76d2d..4d8c2a3 100644
      private fun parseGitHubRepo(url: String): RepoInfo? {
          if (url.isBlank()) return null
          val match = Regex("github\\.com/([^/]+)/([^/]+)").find(url.lowercase(Locale.ROOT))
+diff --git a/app/src/main/java/cn/limpu/hita/ui/main/MainActivity.kt b/app/src/main/java/cn/limpu/hita/ui/main/MainActivity.kt
+index 14936e0..5954412 100644
+--- a/app/src/main/java/cn/limpu/hita/ui/main/MainActivity.kt
++++ b/app/src/main/java/cn/limpu/hita/ui/main/MainActivity.kt
+@@ -1826,6 +1826,7 @@ private fun MainDrawer(
+     onRewardCode: () -> Unit,
+     modifier: Modifier = Modifier,
+ ) {
++    val plannerContext = LocalContext.current
+     val isAppleGlass = themeStyle == ThemeTools.STYLE.APPLE_GLASS
+     val isCyber = themeStyle == ThemeTools.STYLE.CYBER
+     val isSoraCloud = themeStyle == ThemeTools.STYLE.SORA_CLOUD
+@@ -1966,6 +1967,9 @@ private fun MainDrawer(
+                     stringResource(R.string.main_drawer_menu_report),
+                     onUserFeedback
+                 )
++                DrawerItem(R.drawable.ic_baseline_edit_24, stringResource(R.string.planner_title)) {
++                    plannerContext.startActivity(android.content.Intent(plannerContext, cn.limpu.hita.planner.PlannerSettingsActivity::class.java))
++                }
+                 DrawerItem(R.drawable.logo, stringResource(R.string.main_drawer_menu_about), onAbout)
+                 Spacer(Modifier.weight(1f))
+                 Spacer(
 diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
 index 2c2cbec..cc83148 100644
 --- a/app/src/main/res/values/strings.xml

@@ -41,6 +41,7 @@ class Store:
                     status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
                     available REAL NOT NULL DEFAULT 0, lease REAL NOT NULL DEFAULT 0, error TEXT
                 );
+                CREATE TABLE IF NOT EXISTS connections (owner TEXT NOT NULL, target TEXT NOT NULL, seen REAL NOT NULL, PRIMARY KEY(owner,target));
                 CREATE TABLE IF NOT EXISTS cursors (id TEXT PRIMARY KEY, value TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS outbox (
                     id TEXT PRIMARY KEY, payload TEXT NOT NULL,
@@ -53,6 +54,16 @@ class Store:
                 db.execute("ALTER TABLE tasks ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
             planner.initialize(db,timezone)
         os.chmod(path, 0o600)
+
+    def touch_connection(self,owner,target):
+        with self.connection() as db:
+            db.execute("INSERT INTO connections VALUES(?,?,?) ON CONFLICT(owner,target) DO UPDATE SET seen=excluded.seen",(owner,target,time.time()))
+
+    def connections(self,owner):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        with self.connection() as db:
+            return {r["target"]:datetime.fromtimestamp(r["seen"],ZoneInfo(self.timezone)).isoformat() for r in db.execute("SELECT target,seen FROM connections WHERE owner=?",(owner,))}
 
     @contextmanager
     def connection(self):

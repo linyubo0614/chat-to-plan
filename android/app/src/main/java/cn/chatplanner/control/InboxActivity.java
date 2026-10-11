@@ -46,7 +46,6 @@ public class InboxActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
         credentials = new CredentialStore(this);
         ScrollView scroll = new ScrollView(this); root = column(); root.setPadding(24, 24, 24, 24); scroll.addView(root);
         scroll.setOnApplyWindowInsetsListener((v, insets) -> {

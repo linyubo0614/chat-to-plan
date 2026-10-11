@@ -1,11 +1,14 @@
-对话计划 0.4.0：自己的任务日历和分类备忘，复用微信 OpenClaw / GPT-6，保留 HITA 兼容版。
+对话计划 0.5.0 预览版：统一电脑软件、DeepSeek 全助手配置与手机三页布局。
 
-- 安卓主页改为月历和四色象限，可编辑日期、重要/紧急、完成状态及删除。
-- 分类备忘支持任意分类、搜索、编辑和删除。
-- 新增 OpenClaw 工具与 Windows 安装器，现有模型直接整理保存，无需 DeepSeek Key。
-- 移除旧网页适配器和登录测试；助手旧队列中的待办/备忘迁到自有数据库，不读取其他软件数据。
-- HITA 后台写入、读回确认、常驻通知和本地编辑功能保留。
+- Windows 新增 ChatPlanner.exe，内置服务运行环境，在一个窗口启动/停止服务、手机隧道和微信助手，无需安装 Python 或保持多个终端。
+- DeepSeek Key 在电脑软件填写；验证工具调用后配置默认助手、每个助手及子助手，并清除旧聊天模型回退。保留微信授权与工作区。
+- 修复每个助手单独工具限制可能阻止保存的问题，增加微信/HITA 最近连接记录与逐项诊断。
+- 修复 OpenClaw 新增日程没有立即唤醒 HITA 等待连接的问题。
+- 手机拆分每日四象限任务、日历、分类备忘三页，去除备忘简介框，允许截屏，增加桌面图标申请与手动添加入口。
+- 手机设置可直接打开 HITA 连接设置；新版 HITA 主界面左上菜单新增“对话计划连接”。保留课表和本地事件编辑。
 
-下载 `chat-planner-debug.apk` 和 `chat-planner-windows.zip`，更新电脑程序时保留整个 data 文件夹。启动 `windows\start-assistant.cmd`，运行 `windows\install-openclaw.cmd`，成功后按原方式重启 OpenClaw。[Windows 操作步骤](https://github.com/linyubo0614/vibecoding_test_01/blob/main/docs/windows.md)。已有 HITA 兼容版连接可继续使用，无需为新日历重装。
+下载 `chat-planner-windows.zip` 并运行其中的 `ChatPlanner.exe`，或者单独下载 exe。更新电脑软件前关闭旧服务窗口、保留整个 data 文件夹。[操作步骤](https://github.com/linyubo0614/vibecoding_test_01/blob/main/docs/windows.md)。安装工具和切换模型后，重启微信助手并发 `/new` 开始新会话。
 
-发布只复用本提交通过全部检查的构建。模拟器验证不代替真实微信和 OPPO 联调。暂不支持离线新建同步、重复课程、指定提醒或微信修改已有 HITA 事件；事件可在 HITA 内编辑。调试签名可能变化，安装冲突时先保留未确认草稿，服务器日历和备忘不随 App 卸载删除。
+手机安装 `chat-planner-debug.apk`。预览版签名可能无法覆盖旧版，请先保存旧 App 未确认草稿。HITA 只有在需要新应用内菜单或未安装兼容版时更新：**签名冲突时先导出并核对所有课表备份，再卸载重装导入，不能直接卸载丢失课表。**旧兼容版可由新版对话计划设置直接打开连接页。
+
+发布只复用本提交通过全部检查的构建。模拟器和模拟模型验证不代替真实微信、DeepSeek 账号及 OPPO 联调。微信修改已写入 HITA 日程、重复课程、指定提醒、QQ 和离线新增同步暂未实现。

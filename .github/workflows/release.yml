@@ -37,6 +37,12 @@ jobs:
           path: hita-assets
           github-token: ${{ github.token }}
           run-id: ${{ steps.verified.outputs.run_id }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: chat-planner-windows-package
+          path: windows-assets
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.verified.outputs.run_id }}
       - name: Prepare verified APK
         run: |
           mv release-assets/app-debug.apk release-assets/chat-planner-debug.apk
@@ -45,18 +51,19 @@ jobs:
           sha256sum chat-planner-debug.apk > SHA256SUMS
       - name: Prepare Windows bundle and compatible APK
         run: |
-          python3 scripts/package_windows.py --output release-assets/chat-planner-windows.zip
-          mv hita-assets/app-debug.apk release-assets/HITA_Planner_3.0.3-planner.1.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify release-assets/HITA_Planner_3.0.3-planner.1.apk
+          cp windows-assets/chat-planner-windows.zip release-assets/chat-planner-windows.zip
+          cp windows-assets/dist/ChatPlanner.exe release-assets/ChatPlanner.exe
+          mv hita-assets/app-debug.apk release-assets/HITA_Planner_3.0.3-planner.2.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify release-assets/HITA_Planner_3.0.3-planner.2.apk
           cd release-assets
-          sha256sum *.apk *.zip > SHA256SUMS
+          sha256sum *.apk *.zip *.exe > SHA256SUMS
       - name: Publish preview release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           gh release create "$RELEASE_TAG" \
-            release-assets/*.apk release-assets/*.zip release-assets/SHA256SUMS \
+            release-assets/*.apk release-assets/*.zip release-assets/*.exe release-assets/SHA256SUMS \
             --verify-tag --prerelease \
             --title "对话计划 $RELEASE_TAG 预览版" \
             --notes-file docs/release-preview.md

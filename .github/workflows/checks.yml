@@ -64,7 +64,7 @@ jobs:
             $env:OPENCLAW_STATE_DIR = Join-Path $HostRoot 'state'
             $env:OPENCLAW_CONFIG_PATH = Join-Path $env:OPENCLAW_STATE_DIR 'openclaw.json'
             New-Item -ItemType Directory -Path $env:OPENCLAW_STATE_DIR -Force | Out-Null
-            $Seed = '{"agents":{"defaults":{"model":{"primary":"openai/gpt-6"}}},"tools":{"alsoAllow":["existing-tool"]}}'
+            $Seed = '{"agents":{"defaults":{"model":{"primary":"openai/gpt-6"}},"list":[{"id":"main","model":"openai/gpt-6","tools":{"allow":["read"]}},{"id":"helper","model":"openai/gpt-6","subagents":{"model":"openai/gpt-6"}}]},"tools":{"alsoAllow":["existing-tool"]}}'
             [IO.File]::WriteAllText($env:OPENCLAW_CONFIG_PATH,$Seed,(New-Object Text.UTF8Encoding($false)))
             powershell.exe -NoProfile -ExecutionPolicy Bypass -File windows/install-openclaw.ps1
             if ($LASTEXITCODE -ne 0) { throw 'Native OpenClaw installer failed' }
@@ -72,6 +72,48 @@ jobs:
             if ($Config.agents.defaults.model.primary -ne 'openai/gpt-6') { throw 'Existing model changed' }
             if ($Config.tools.alsoAllow -notcontains 'existing-tool') { throw 'Existing tool permission removed' }
             if ($Config.tools.alsoAllow -notcontains 'chat_planner_record') { throw 'Planner tools missing' }
+            python -c "from tools.openclaw_config import OpenClaw; c=OpenClaw('.'); print('DeepSeek agents configured:',c.configure_deepseek('only-a-fake-key-for-native-schema-test')); c.inspect()"
+            if ($LASTEXITCODE -ne 0) { throw 'Native DeepSeek all-agent configuration failed' }
+            $Updated = Get-Content $env:OPENCLAW_CONFIG_PATH -Raw | ConvertFrom-Json
+            if ($Updated.agents.defaults.model.primary -ne 'deepseek/deepseek-chat') { throw 'Default model not DeepSeek' }
+            $Agents = @($Updated.agents.list)
+            if ($Updated.agents.entries) { $Agents = @($Updated.agents.entries.PSObject.Properties | ForEach-Object { $_.Value }) }
+            foreach ($Agent in $Agents) {
+              if ($Agent.model.primary -ne 'deepseek/deepseek-chat' -or $Agent.subagents.model.primary -ne 'deepseek/deepseek-chat') { throw 'Agent override still uses old model' }
+              if ($Agent.tools.allow -and $Agent.tools.allow -notcontains 'chat_planner_record') { throw 'Agent tool policy blocks recording' }
+            }
+
+          } finally { taskkill.exe /PID $Server.Id /T /F | Out-Null }
+      - name: Build standalone desktop software
+        shell: powershell
+        run: |
+          python -m pip install -r requirements.desktop-build.txt
+          python scripts/build_windows.py
+          if ($LASTEXITCODE -ne 0) { throw 'Desktop executable build failed' }
+      - name: Verify standalone desktop UI and server without Python installation
+        shell: powershell
+        run: |
+          $Standalone = Join-Path $env:RUNNER_TEMP 'Standalone 中文 path'
+          New-Item -ItemType Directory -Path $Standalone -Force | Out-Null
+          Copy-Item dist/ChatPlanner.exe $Standalone
+          $Exe = Join-Path $Standalone 'ChatPlanner.exe'
+          $Ui = Start-Process $Exe -ArgumentList '--check-ui' -PassThru
+          if (-not $Ui.WaitForExit(30000) -or $Ui.ExitCode -ne 0) { throw 'Standalone desktop UI failed' }
+          python -c "from desktop.controller import Controller; from pathlib import Path; c=Controller(Path(r'$Standalone')); c.prepare()"
+          $Server = Start-Process $Exe -ArgumentList '--serve' -PassThru
+          try {
+            $Ready = $false
+            for ($Attempt=0; $Attempt -lt 60; $Attempt++) {
+              if ($Server.HasExited) { throw 'Standalone service exited' }
+              try { Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8000/healthz' | Out-Null; $Ready=$true; break } catch { Start-Sleep -Seconds 1 }
+            }
+            if (-not $Ready) { throw 'Standalone service did not start' }
+            $Token = (Get-Content (Join-Path $Standalone 'data/api-token') -Raw).Trim()
+            $Status = Invoke-RestMethod 'http://127.0.0.1:8000/v1/status' -Headers @{Authorization="Bearer $Token"}
+            if ($Status.integrations.planner -ne 'calendar_quadrants_and_memos') { throw 'Standalone runtime wrong' }
+            $Record = '{"record_id":"dddddddddddddddddddddddddddddddd","kind":"memo","title":"standalone desktop test","category":"test","body":"real executable"}'
+            $Saved = Invoke-RestMethod 'http://127.0.0.1:8000/v1/planner/records' -Method POST -Headers @{Authorization="Bearer $Token"} -ContentType 'application/json' -Body $Record
+            if ($Saved.title -ne 'standalone desktop test') { throw 'Standalone real save failed' }
           } finally { taskkill.exe /PID $Server.Id /T /F | Out-Null }
       - name: Verify extracted bundle, including Unicode and spaces
         shell: powershell
@@ -80,13 +122,16 @@ jobs:
           $Extract = Join-Path $env:RUNNER_TEMP 'Planner 中文 path with spaces'
           Expand-Archive chat-planner-windows.zip -DestinationPath $Extract -Force
           $Root = Join-Path $Extract 'ChatPlanner'
+          if (-not (Test-Path (Join-Path $Root 'ChatPlanner.exe'))) { throw 'Desktop software missing from ZIP' }
           if (-not (Test-Path (Join-Path $Root 'openclaw/record.schema.json'))) { throw 'Plugin missing from ZIP' }
           if (-not (Test-Path (Join-Path $Root 'windows/install-openclaw.cmd'))) { throw 'Installer missing from ZIP' }
           if (Test-Path (Join-Path $Root 'data')) { throw 'Private data packaged' }
       - uses: actions/upload-artifact@v4
         with:
           name: chat-planner-windows-package
-          path: chat-planner-windows.zip
+          path: |
+            chat-planner-windows.zip
+            dist/ChatPlanner.exe
           if-no-files-found: error
   backend:
     runs-on: ubuntu-24.04

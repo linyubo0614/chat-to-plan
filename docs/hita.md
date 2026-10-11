@@ -2,7 +2,7 @@
 
 你已允许维护兼容版并接受常驻通知。本版基于 MIT 授权的 [HIT-A/HITA_Android](https://github.com/HIT-A/HITA_Android)，固定源码提交见 `integrations/hita/upstream.json`。全部新增源码、构建补丁和原始许可证都保存于本仓库，可重复构建；没有修改或推送上游仓库。
 
-下载 Releases 中 `HITA_Planner_3.0.3-planner.1.apk`。这是独立包名 `cn.chatplanner.hita` 的预览版，可以与原版并存；**不要卸载原版**。桌面有课表入口和“对话计划连接”设置入口。后者只在你手动打开时显示界面，后台写入不会打开页面。
+下载 Releases 中 `HITA_Planner_3.0.3-planner.2.apk`。这是独立包名 `cn.chatplanner.hita` 的预览版，可以与原版并存；**不要卸载原版**。桌面有课表入口和“对话计划连接”设置入口。后者只在你手动打开时显示界面，后台写入不会打开页面。
 
 ## 连接与核对
 
@@ -25,3 +25,5 @@ python3 scripts/build_hita.py --output /tmp/hita-planner-build --sdk "$ANDROID_H
 ```
 
 输出目录必须不存在，脚本不会覆盖已有工作区。需要 JDK 21、SDK 36、网络下载 Gradle/Maven 依赖；固定上游源码校验、补丁检查、编译和上游单元测试均由脚本执行。CI 另用 Android 35 模拟器运行本地 Room 写入、响应丢失重试去重、手动修改保护及不支持提醒的拒绝测试；这些测试不代替 OPPO 真机验收。
+
+新版连接入口：HITA 主界面左上菜单 → 对话计划连接；也可在手机对话计划设置中点“打开 HITA 连接设置”。原版 HITA 不含该入口。APK 签名冲突时必须先导出并核对所有课表备份，再卸载重装并导入。

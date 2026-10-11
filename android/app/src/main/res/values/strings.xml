@@ -13,7 +13,7 @@
     <string name="save">保存设置</string>
     <string name="clear_key">移除已配置的 API Key</string>
     <string name="integrations">记录到哪里</string>
-    <string name="integration_default">对话计划：任务日历与分类备忘\nHITA：兼容版后台连接\n微信：使用电脑 OpenClaw / DeepSeek\nQQ：后续接入</string>
+    <string name="integration_default">对话计划：任务日历与分类备忘\nHITA：兼容版后台连接\n微信 / QQ：沿用 DeepSeek Harness 与 dsh-im</string>
     <string name="security">连接口令由安卓密钥库保护；API Key 经 HTTPS 发往你的服务端，加密保存，不在 App 中持久保存。微信和 QQ 模型沿用 Harness 配置；日历和备忘保存在自己的电脑服务。</string>
     <string name="disconnected">尚未连接</string>
     <string name="connecting">正在连接…</string>
@@ -23,12 +23,12 @@
     <string name="invalid_url">请输入 HTTPS 服务地址。调试版仅允许模拟器使用 http://10.0.2.2。</string>
     <string name="missing_token">请先填写有效的连接口令。</string>
     <string name="key_present">API Key：已配置（不会回显）</string>
-    <string name="key_missing">微信助手的 DeepSeek Key 请在电脑连接中心配置</string>
+    <string name="key_missing">未配置可选的 App 分析 Key；微信 / QQ 继续使用 Harness，无需在此填写</string>
     <string name="connected_status">已连接 · 分析%1$s · 待处理 %2$d 条</string>
     <string name="enabled">开启</string>
     <string name="paused">暂停</string>
     <string name="clear_title">移除 API Key？</string>
-    <string name="clear_message">移除后 App 内的消息分析无法调用 DeepSeek。微信 OpenClaw 使用自己的模型，不受影响。</string>
+    <string name="clear_message">移除后 App 内的消息分析无法调用 DeepSeek。微信 / QQ 的 Harness 使用自己的模型，不受影响。</string>
     <string name="confirm">移除</string>
     <string name="cancel">取消</string>
     <string name="test_message">测试消息分析</string>

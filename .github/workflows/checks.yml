@@ -163,12 +163,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: cd android && ./gradlew --no-daemon --max-workers=2 connectedDebugAndroidTest
-      - name: Retrieve app previews containing only CI test data
-        if: always()
-        run: |
-          mkdir -p planner-previews
-          adb pull /sdcard/Android/data/cn.chatplanner.control/files/. planner-previews/ || true
+          script: bash scripts/test_android_ui.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:

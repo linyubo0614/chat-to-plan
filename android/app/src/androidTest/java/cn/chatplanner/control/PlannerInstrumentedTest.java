@@ -39,7 +39,16 @@ public class PlannerInstrumentedTest extends InstrumentationTestCase {
             if(found[0])return;Thread.sleep(100);
         }fail("Missing UI: "+label);
     }
-    private void click(String label) throws Exception { await(label);getInstrumentation().runOnMainSync(()->find(label).performClick());getInstrumentation().waitForIdleSync(); }
+    private void click(String label) throws Exception {
+        await(label);getInstrumentation().runOnMainSync(()->{
+            View target=find(label);
+            while(target!=null) {
+                if(target.performClick())return;
+                target=target.getParent() instanceof View?(View)target.getParent():null;
+            }
+            fail("No clickable card: "+label);
+        });getInstrumentation().waitForIdleSync();
+    }
     private JSONObject api(String path) throws Exception {return ApiClient.request("http://10.0.2.2:8000",TOKEN,"GET",path,null);}
     private void screenshot(String name) throws Exception {
         final Bitmap[] image={null};getInstrumentation().runOnMainSync(()->{

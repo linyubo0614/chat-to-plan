@@ -112,7 +112,13 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: cd "$RUNNER_TEMP/hita-planner" && ./gradlew --no-daemon --max-workers=2 connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=cn.limpu.hita.planner.PlannerWriteInstrumentedTest
+          script: cd "$RUNNER_TEMP/hita-planner" && ./gradlew --no-daemon --max-workers=2 :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=cn.limpu.hita.planner.PlannerWriteInstrumentedTest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hita-planner-room-test-results
+          path: ${{ runner.temp }}/hita-planner/app/build/outputs/androidTest-results/connected/
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
           name: hita-planner-debug-apk

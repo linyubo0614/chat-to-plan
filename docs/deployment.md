@@ -2,6 +2,8 @@
 
 ## 运行方式
 
+Windows 11 用户直接按 [本机部署与授权验证](windows.md)运行发布附件中的脚本，无需先学习 Docker。
+
 Python 3.12，直接依赖在 `requirements.txt` 中声明，安装使用固定完整依赖版本的 `requirements.lock`。`bash scripts/install.sh` 创建 `.venv`；`bash scripts/start.sh` 启动一个进程和一个后台工作线程。调试用本机地址不作为公开网页预览。
 
 如果 Docker 构建网络不能解析 PyPI，可在与目标容器兼容的 Linux/Python 3.12 主机上执行 `.venv/bin/python -m pip download -r requirements.lock -d .wheelhouse`，再构建。Dockerfile 会从经正常 TLS 下载的本地 wheels 离线安装；无需关闭 TLS 验证。`.wheelhouse` 不提交 Git，也不打包进最终镜像。

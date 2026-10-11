@@ -1,0 +1,225 @@
+diff --git a/app/build.gradle b/app/build.gradle
+index ca3e65f..287579e 100644
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -12,7 +12,7 @@ def envVersionCode = System.getenv("VERSION_CODE")
+ def appVersionCodeValue = (envVersionCode != null && envVersionCode.matches("\\d+"))
+     ? Integer.parseInt(envVersionCode)
+     : 2026093005
+-def appVersionNameValue = "3.0.3"
++def appVersionNameValue = "3.0.3-planner.1"
+ 
+ def keystorePropertiesFile = rootProject.file("keystore.properties")
+ def keystoreProperties = new Properties()
+@@ -43,8 +43,8 @@ def buildConfigString = { String value ->
+     "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+ }
+ 
+-def deepSeekApiKey = resolveSecret("deepseekApiKey", "DEEPSEEK_API_KEY")
+-def zhipuApiKey = resolveSecret("zhipuApiKey", "ZHIPU_API_KEY")
++def deepSeekApiKey = ""
++def zhipuApiKey = ""
+ 
+ android {
+     signingConfigs {
+@@ -59,7 +59,7 @@ android {
+     }
+ 
+     defaultConfig {
+-        applicationId "cn.limpu.hita"
++        applicationId "cn.chatplanner.hita"
+         minSdkVersion 26
+         targetSdk 35
+         compileSdk 36
+@@ -79,7 +79,7 @@ android {
+         // 统一入口：nginx 按路径分发（/api/usage|notices|visit|stats → hita-api；/api/courses|rag|... → agent-backend；/v1/* → course-server）
+         buildConfigField "String", "AGENT_BACKEND_BASE_URL", '"https://api.hita.limpu.cn"'
+         buildConfigField "String", "HOA_API_KEY", '""'
+-        buildConfigField "String", "UPDATE_URL", '"https://github.com/HIT-A/HITA_Android/releases/latest"'
++        buildConfigField "String", "UPDATE_URL", '"https://github.com/linyubo0614/vibecoding_test_01/releases"'
+         buildConfigField "String", "UPDATE_VERSION_NAME", "\"${appVersionNameValue}\""
+         buildConfigField "long", "UPDATE_VERSION_CODE", "${appVersionCodeValue}L"
+         buildConfigField "String", "UPDATE_LOG", '""'
+@@ -96,7 +96,7 @@ android {
+     buildTypes {
+         debug {
+             // 诊断版使用独立 applicationId，与正式版共存不冲突
+-            applicationIdSuffix ".diag"
++            // Compatibility debug and release share the dedicated package.
+             if (keystorePropertiesFile.exists() && keystoreProperties['storeFile']) {
+                 signingConfig signingConfigs.release
+             }
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 8b06c1d..73ab5e6 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -115,6 +115,21 @@
+             </intent-filter>
+         </receiver>
+ 
++        <service android:name=".planner.PlannerForegroundService" android:exported="false"
++            android:foregroundServiceType="specialUse">
++            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
++                android:value="User-enabled persistent connection to deliver and verify private calendar entries in seconds without opening an activity." />
++        </service>
++        <receiver android:name=".planner.PlannerBootReceiver" android:exported="false">
++            <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
++        </receiver>
++        <activity android:name=".planner.PlannerSettingsActivity" android:exported="true"
++            android:label="@string/planner_title">
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.LAUNCHER" />
++            </intent-filter>
++        </activity>
+         <activity
+             android:name=".ui.main.MainActivity"
+             android:exported="true"
+diff --git a/app/src/main/java/cn/limpu/hita/HApplication.kt b/app/src/main/java/cn/limpu/hita/HApplication.kt
+index 84c7af9..577970f 100644
+--- a/app/src/main/java/cn/limpu/hita/HApplication.kt
++++ b/app/src/main/java/cn/limpu/hita/HApplication.kt
+@@ -43,6 +43,8 @@ class HApplication : Application() {
+ 
+     override fun onCreate() {
+         super.onCreate()
++        // Schedule silent delivery; no Activity is opened by the worker.
++        cn.limpu.hita.planner.PlannerConfig.schedule(this)
+ 
+         // 启用 Material You 动态配色（Android 12+ 自动跟随系统壁纸颜色）
+         DynamicColors.applyToActivitiesIfAvailable(this)
+diff --git a/app/src/main/java/cn/limpu/hita/data/repository/UpdateRepository.kt b/app/src/main/java/cn/limpu/hita/data/repository/UpdateRepository.kt
+index 0c76d2d..4d8c2a3 100644
+--- a/app/src/main/java/cn/limpu/hita/data/repository/UpdateRepository.kt
++++ b/app/src/main/java/cn/limpu/hita/data/repository/UpdateRepository.kt
+@@ -29,7 +29,7 @@ class UpdateRepository @Inject constructor(
+             val releases = state.data ?: return@map DataState(DataState.STATE.FETCH_FAILED)
+             val items = releases
+                 .asSequence()
+-                .filter { it.draft != true && (allowPrerelease || it.prerelease != true) }
++                .filter { it.draft != true && (allowPrerelease || it.prerelease != true) && (!isPlannerRepo(repo) || it.assets?.any { asset -> isPlannerApk(asset.name) } == true) }
+                 .mapNotNull { release ->
+                     val version = ParsedVersion.parse(release.tagName ?: release.name)
+                         ?: return@mapNotNull null
+@@ -60,7 +60,7 @@ class UpdateRepository @Inject constructor(
+             val releases = state.data ?: return@map DataState(DataState.STATE.FETCH_FAILED)
+             val current = ParsedVersion.parse(currentVersionName)
+                 ?: return@map DataState(DataState.STATE.FETCH_FAILED)
+-            val best = selectBestRelease(releases, allowPrerelease)
++            val best = selectBestRelease(releases, allowPrerelease, isPlannerRepo(repo))
+                 ?: return@map DataState(DataState.STATE.FETCH_FAILED)
+             val latestVersion = ParsedVersion.parse(best.tagName ?: best.name)
+                 ?: return@map DataState(DataState.STATE.FETCH_FAILED)
+@@ -68,7 +68,7 @@ class UpdateRepository @Inject constructor(
+             val updateLogText = buildReleaseMarkdown(best)
+ 
+             val apkAsset = best.assets?.find {
+-                it.name?.endsWith(".apk", ignoreCase = true) == true
++                it.name?.endsWith(".apk", ignoreCase = true) == true && (!isPlannerRepo(repo) || isPlannerApk(it.name))
+             }
+             val result = CheckUpdateResult().apply {
+                 latestVersionName = latestVersion.displayName()
+@@ -106,7 +106,7 @@ class UpdateRepository @Inject constructor(
+             val releases = state.data ?: return@map DataState(DataState.STATE.FETCH_FAILED)
+             val current = ParsedVersion.parse(currentVersionName)
+                 ?: return@map DataState(DataState.STATE.FETCH_FAILED)
+-            val best = selectBestRelease(releases, allowPrerelease)
++            val best = selectBestRelease(releases, allowPrerelease, isPlannerRepo(repo))
+                 ?: return@map DataState(DataState.STATE.FETCH_FAILED)
+             val latestVersion = ParsedVersion.parse(best.tagName ?: best.name)
+                 ?: return@map DataState(DataState.STATE.FETCH_FAILED)
+@@ -114,7 +114,7 @@ class UpdateRepository @Inject constructor(
+             val updateLogText = buildReleaseMarkdown(best)
+ 
+             val apkAsset = best.assets?.find {
+-                it.name?.endsWith(".apk", ignoreCase = true) == true
++                it.name?.endsWith(".apk", ignoreCase = true) == true && (!isPlannerRepo(repo) || isPlannerApk(it.name))
+             }
+             val result = CheckUpdateResult().apply {
+                 latestVersionName = latestVersion.displayName()
+@@ -173,10 +173,12 @@ class UpdateRepository @Inject constructor(
+ 
+     private fun selectBestRelease(
+         releases: List<GitHubRelease>,
+-        allowPrerelease: Boolean
++        allowPrerelease: Boolean,
++        plannerOnly: Boolean = false
+     ): GitHubRelease? {
+         val candidates = releases.filter { release ->
+-            release.draft != true && (allowPrerelease || release.prerelease != true)
++            release.draft != true && (allowPrerelease || release.prerelease != true) &&
++                (!plannerOnly || release.assets?.any { isPlannerApk(it.name) } == true)
+         }
+         var best: GitHubRelease? = null
+         var bestVersion: ParsedVersion? = null
+@@ -193,6 +195,12 @@ class UpdateRepository @Inject constructor(
+         return best
+     }
+ 
++    private fun isPlannerRepo(repo: RepoInfo): Boolean =
++        repo.owner == "linyubo0614" && repo.repo == "vibecoding_test_01"
++
++    private fun isPlannerApk(name: String?): Boolean =
++        name?.startsWith("HITA_Planner_") == true && name.endsWith(".apk", ignoreCase = true)
++
+     private fun parseGitHubRepo(url: String): RepoInfo? {
+         if (url.isBlank()) return null
+         val match = Regex("github\\.com/([^/]+)/([^/]+)").find(url.lowercase(Locale.ROOT))
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 2c2cbec..cc83148 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -1,5 +1,5 @@
+ <resources>
+-    <string name="app_name">HITA</string>
++    <string name="app_name">HITA兼容版</string>
+     <string name="timetable_wallpaper">课表壁纸</string>
+     <string name="wallpaper_remove">移除壁纸</string>
+     <string name="wallpaper_change">更换壁纸</string>
+diff --git a/app/src/main/res/xml/analytics_backup_rules.xml b/app/src/main/res/xml/analytics_backup_rules.xml
+index d7f0530..d4e9692 100644
+--- a/app/src/main/res/xml/analytics_backup_rules.xml
++++ b/app/src/main/res/xml/analytics_backup_rules.xml
+@@ -1,5 +1,6 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <full-backup-content>
++        <exclude domain="sharedpref" path="planner.xml" />
+         <exclude domain="sharedpref" path="usage_analytics.xml" />
+         <exclude domain="sharedpref" path="usage_analytics_settings.xml" />
+         <exclude domain="sharedpref" path="usage_analytics_session.xml" />
+diff --git a/app/src/main/res/xml/analytics_data_extraction_rules.xml b/app/src/main/res/xml/analytics_data_extraction_rules.xml
+index 8e01beb..6f265bc 100644
+--- a/app/src/main/res/xml/analytics_data_extraction_rules.xml
++++ b/app/src/main/res/xml/analytics_data_extraction_rules.xml
+@@ -1,6 +1,7 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <data-extraction-rules>
+     <cloud-backup>
++        <exclude domain="sharedpref" path="planner.xml" />
+         <exclude domain="sharedpref" path="usage_analytics.xml" />
+         <exclude domain="sharedpref" path="usage_analytics_settings.xml" />
+         <exclude domain="sharedpref" path="usage_analytics_session.xml" />
+@@ -11,6 +12,7 @@
+         <exclude domain="database" path="usage_analytics_v2.db-journal" />
+     </cloud-backup>
+     <device-transfer>
++        <exclude domain="sharedpref" path="planner.xml" />
+         <exclude domain="sharedpref" path="usage_analytics.xml" />
+         <exclude domain="sharedpref" path="usage_analytics_settings.xml" />
+         <exclude domain="sharedpref" path="usage_analytics_session.xml" />
+diff --git a/gradle/wrapper/gradle-wrapper.properties b/gradle/wrapper/gradle-wrapper.properties
+index a14aab2..1924dc7 100644
+--- a/gradle/wrapper/gradle-wrapper.properties
++++ b/gradle/wrapper/gradle-wrapper.properties
+@@ -1,6 +1,8 @@
+-#Sat Jun 19 01:37:16 CST 2021
+ distributionBase=GRADLE_USER_HOME
+-distributionUrl=https\://mirrors.cloud.tencent.com/gradle/gradle-8.11.1-bin.zip
+ distributionPath=wrapper/dists
+-zipStorePath=wrapper/dists
++distributionUrl=https\://downloads.gradle.org/distributions/gradle-8.11.1-bin.zip
++networkTimeout=10000
++validateDistributionUrl=true
+ zipStoreBase=GRADLE_USER_HOME
++zipStorePath=wrapper/dists
++distributionSha256Sum=f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6

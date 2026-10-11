@@ -5,8 +5,9 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .config import Settings
+from .delivery import Delivery
 from .calendar import export_ics
-from .models import Incoming, Item, TaskUpdate
+from .models import Incoming, Item, TaskUpdate, DeliveryClaim, DeliveryReceipt
 from .parser import DeepSeekParser
 from .runtime import Runtime, SettingsUpdate
 from .store import Conflict, Store
@@ -17,6 +18,7 @@ from .worker import Worker
 def create_app(settings=None, parser=None, run_worker=True):
     settings = settings or Settings.from_env()
     store = Store(settings.db_path)
+    delivery = Delivery(store)
     runtime = Runtime(store,settings)
     wechat = WeChatAPI(settings) if settings.wechat_enabled else None
     crypto = WeChatCrypto(settings) if settings.wechat_enabled else None
@@ -29,7 +31,7 @@ def create_app(settings=None, parser=None, run_worker=True):
         yield
         worker.stop()
 
-    app = FastAPI(title="对话计划助手", version="0.2.0", lifespan=lifespan,
+    app = FastAPI(title="对话计划助手", version="0.3.0", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.store, app.state.worker, app.state.runtime = store, worker, runtime
     bearer = HTTPBearer(auto_error=False)
@@ -49,7 +51,7 @@ def create_app(settings=None, parser=None, run_worker=True):
     def status(owner=Depends(authorize)):
         return {"deepseek_configured":runtime.public()["deepseek_key_configured"], "enabled":runtime.public()["enabled"], "wechat_configured":settings.wechat_enabled,
                 "wechat_allowlist_configured":bool(settings.allowed_users),
-                "integrations":{"tomato":"unverified", "hita":"manual_ics_only", "qq":"not_implemented"},
+                "integrations":{"tomato":"local_browser_bridge_unverified", "hita":"compatible_bridge_unverified", "qq":"deferred"},
                 "queues":store.counts()}
 
     @app.get("/v1/settings")
@@ -58,7 +60,9 @@ def create_app(settings=None, parser=None, run_worker=True):
 
     @app.put("/v1/settings")
     def update_settings(patch: SettingsUpdate,owner=Depends(authorize)):
-        return runtime.update(patch)
+        result = runtime.update(patch)
+        delivery.signal()
+        return result
 
     @app.post("/v1/messages", status_code=202)
     def submit(message: Incoming, owner=Depends(authorize)):
@@ -78,6 +82,35 @@ def create_app(settings=None, parser=None, run_worker=True):
     @app.get("/v1/messages")
     def messages(limit: int = Query(default=20,ge=1,le=50), before: int | None = Query(default=None,ge=1), owner=Depends(authorize)):
         return store.list_messages(owner,limit,before)
+
+    @app.post("/v1/delivery/{target}/claim")
+    def claim_delivery(target: str, body: DeliveryClaim,wait: int = Query(default=0,ge=0,le=25),owner=Depends(authorize)):
+        if target not in {"hita","tomato"}:
+            raise HTTPException(404,"Unknown target")
+        if not runtime.public()["enabled"]:
+            return {"task":None,"paused":True}
+        return delivery.wait_claim(target,owner,body.client_id,wait,lambda:runtime.public()["enabled"])
+
+    @app.post("/v1/delivery/{task_id}/ack")
+    def acknowledge_delivery(task_id: str,body: DeliveryReceipt,owner=Depends(authorize)):
+        try:
+            result = delivery.acknowledge(task_id,owner,body)
+        except Conflict as exc:
+            raise HTTPException(409,str(exc)) from exc
+        if result is None:
+            raise HTTPException(404,"Delivery not found")
+        return result
+
+    @app.post("/v1/delivery/{task_id}/retry")
+    def retry_delivery(task_id: str,owner=Depends(authorize)):
+        try:
+            result = delivery.retry(task_id,owner)
+        except Conflict as exc:
+            raise HTTPException(409,str(exc)) from exc
+        if result is None:
+            raise HTTPException(404,"Delivery not found")
+        delivery.signal()
+        return result
 
     @app.put("/v1/tasks/{task_id}")
     def edit_task(task_id: str, patch: TaskUpdate, owner=Depends(authorize)):

@@ -115,18 +115,20 @@ class Store:
             for item in result.items:
                 status = "needs_clarification" if item.clarification else "blocked"
                 reason = item.clarification or (
-                    "HITA 未提供已验证的外部写入接口；尚未写入手机。" if item.target == "hita"
-                    else "番茄计划写入接口尚未验证；尚未写入应用。"
+                    "等待 HITA 兼容版连接并完成后台同步；尚未写入手机。" if item.target == "hita"
+                    else "等待番茄计划授权连接端完成写入；尚未写入应用。"
                 )
                 db.execute("INSERT INTO tasks(id,message_id,target,payload,status,reason) VALUES(?,?,?,?,?,?)", (uuid.uuid4().hex,row["id"],item.target,item.model_dump_json(),status,reason))
             db.execute("UPDATE messages SET status='parsed',question=?,lease=0,error=NULL WHERE id=?", (result.question,row["id"]))
             if row["source"] == "wechat":
                 lines = ["已完成内容分析；尚未写入目标应用。"]
                 for item in result.items:
-                    lines.append(f"• {item.title} → {'HITA' if item.target=='hita' else '番茄计划'}" + (f"：{item.clarification}" if item.clarification else "（等待接入）"))
+                    lines.append(f"• {item.title} → {'HITA' if item.target=='hita' else '番茄计划'}" + (f"：{item.clarification}" if item.clarification else "（等待连接端写入并核对）"))
                 if result.question:
                     lines.append(result.question)
                 self._outbox(db, row, "\n".join(lines))
+        if hasattr(self,"delivery_signal"):
+            self.delivery_signal()
 
     def _outbox(self, db, row, text):
         context = json.loads(row["context"])
@@ -174,9 +176,11 @@ class Store:
                 db.execute("UPDATE tasks SET status='cancelled',reason='已取消；未写入目标应用。',revision=revision+1 WHERE id=?",(key,))
             else:
                 status = "needs_clarification" if item.clarification else "blocked"
-                reason = item.clarification or ("HITA 未提供已验证的外部写入接口；尚未写入手机。" if item.target == "hita" else "番茄计划写入接口尚未验证；尚未写入应用。")
+                reason = item.clarification or ("等待 HITA 兼容版连接并完成后台同步；尚未写入手机。" if item.target == "hita" else "等待番茄计划授权连接端完成写入；尚未写入应用。")
                 db.execute("UPDATE tasks SET target=?,payload=?,status=?,reason=?,revision=revision+1 WHERE id=?",
                     (item.target,item.model_dump_json(),status,reason,key))
+            if hasattr(self,"delivery_signal"):
+                self.delivery_signal()
             return row["message_id"]
 
     def retry_message(self, key, owner):

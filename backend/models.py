@@ -72,3 +72,13 @@ class Interpretation(StrictModel):
 class TaskUpdate(StrictModel):
     revision: int = Field(ge=0)
     item: Item
+
+
+class DeliveryClaim(StrictModel):
+    client_id: str = Field(min_length=1,max_length=128)
+
+
+class DeliveryReceipt(DeliveryClaim):
+    lease_token: str = Field(min_length=32,max_length=128)
+    revision: int = Field(ge=0)
+    external_id: str = Field(min_length=1,max_length=200)

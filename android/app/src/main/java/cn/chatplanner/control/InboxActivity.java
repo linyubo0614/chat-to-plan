@@ -122,6 +122,8 @@ public class InboxActivity extends Activity {
             case "blocked": return getString(R.string.state_blocked);
             case "needs_clarification": return getString(R.string.state_clarify);
             case "cancelled": return getString(R.string.state_cancelled);
+            case "delivering": return getString(R.string.state_delivering);
+            case "written": return getString(R.string.state_written);
             default: return getString(R.string.state_pending);
         }
     }
@@ -171,6 +173,8 @@ public class InboxActivity extends Activity {
             for (String name : new String[]{"starts_at", "ends_at", "due_at", "location", "recurrence_description"})
                 if (!item.isNull(name) && !item.optString(name).isEmpty()) text(entries, item.optString(name), 14);
             text(entries, task.optString("reason"), 14);
+            if ("delivering".equals(task.optString("status")))
+                button(entries,getString(R.string.retry_delivery),() -> retryDelivery(task.optString("id"),row.optString("id")));
             if ("blocked".equals(task.optString("status")) || "needs_clarification".equals(task.optString("status"))) {
                 button(entries, getString(R.string.edit_record), () -> edit(task));
                 button(entries, getString(R.string.cancel_record), () -> new AlertDialog.Builder(this)
@@ -184,6 +188,15 @@ public class InboxActivity extends Activity {
         setBusy(true); io.execute(() -> {
             try { ApiClient.request(base, token, "POST", "/v1/messages/" + id + "/retry", null); poll(id, 0); }
             catch (Exception ex) { failed(ex); }
+        });
+    }
+    private void retryDelivery(String taskId,String messageId) {
+        setBusy(true); io.execute(() -> {
+            try {
+                ApiClient.request(base,token,"POST","/v1/delivery/"+taskId+"/retry",null);
+                JSONObject row=ApiClient.request(base,token,"GET","/v1/messages/"+messageId,null);
+                post(() -> show(row));
+            } catch(Exception ex) { failed(ex); }
         });
     }
     private void compose() {

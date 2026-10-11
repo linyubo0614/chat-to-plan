@@ -1,0 +1,16 @@
+<resources>
+    <string name="planner_title">HITA 兼容版 · 对话同步</string>
+    <string name="planner_help">开启后通过常驻通知保持连接，在后台把助手里的完整单次课程和日程写入“对话计划”课表，不会自动打开手机界面。正常联网时以数秒内交付为目标；DeepSeek 分析耗时另计。重启、系统限制或断网可能延迟。重复规则和指定提醒暂不执行。原版与本兼容版的数据相互独立。</string>
+    <string name="planner_timetable">对话计划</string>
+    <string name="planner_server">HTTPS 服务地址</string>
+    <string name="planner_token">连接口令（相同地址下留空保留）</string>
+    <string name="planner_enabled">启用后台同步</string>
+    <string name="planner_save">保存并安排同步</string>
+    <string name="planner_unconfirmed">还未确认同步状态；写入结果请在控制 App 的事项详情查看。</string>
+    <string name="planner_saved">设置已保存，后台同步已安排。保存设置不代表已有课程写入成功。</string>
+    <string name="planner_invalid">请检查 HTTPS 地址和连接口令；更换地址必须重新填写口令。</string>
+    <string name="planner_channel">对话计划 · 课表连接</string>
+    <string name="planner_connecting">正在连接你的服务…</string>
+    <string name="planner_connected">保持课表同步连接</string>
+    <string name="planner_reconnecting">连接暂未确认，正在重试</string>
+</resources>

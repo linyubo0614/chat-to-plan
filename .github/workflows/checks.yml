@@ -8,6 +8,33 @@ on:
 permissions:
   contents: read
 jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.windows.txt
+      - run: python -m pip install -r requirements.windows.txt
+      - name: Validate PowerShell syntax
+        shell: powershell
+        run: |
+          Get-ChildItem windows/*.ps1 | ForEach-Object {
+            $Tokens = $null; $ParseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$Tokens,[ref]$ParseErrors) | Out-Null
+            if ($ParseErrors.Count) { throw $ParseErrors }
+          }
+      - run: python -m unittest discover -s tests -v
+      - name: Verify Windows-account credential encryption
+        shell: powershell
+        run: |
+          Add-Type -AssemblyName System.Security
+          $Plain = [Text.Encoding]::UTF8.GetBytes('temporary-credential-check')
+          $Encrypted = [Security.Cryptography.ProtectedData]::Protect($Plain,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)
+          $Restored = [Security.Cryptography.ProtectedData]::Unprotect($Encrypted,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)
+          if ([Text.Encoding]::UTF8.GetString($Restored) -ne 'temporary-credential-check') { throw 'DPAPI check failed' }
   backend:
     runs-on: ubuntu-24.04
     steps:
@@ -38,4 +65,34 @@ jobs:
         with:
           name: chat-planner-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+  hita:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare SDK 36
+        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Build pinned HITA compatible version and run upstream tests
+        run: python3 scripts/build_hita.py --output "$RUNNER_TEMP/hita-planner" --sdk "$ANDROID_HOME" --jdk "$JAVA_HOME"
+      - name: Enable Android emulator acceleration
+        run: |
+          sudo chmod 666 /dev/kvm
+      - name: Verify bridge writes against real Android Room database
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: cd "$RUNNER_TEMP/hita-planner" && ./gradlew --no-daemon --max-workers=2 connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=cn.limpu.hita.planner.PlannerWriteInstrumentedTest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hita-planner-debug-apk
+          path: ${{ runner.temp }}/hita-planner/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

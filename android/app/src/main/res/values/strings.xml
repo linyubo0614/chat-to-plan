@@ -13,7 +13,7 @@
     <string name="save">保存设置</string>
     <string name="clear_key">移除已配置的 API Key</string>
     <string name="integrations">记录到哪里</string>
-    <string name="integration_default">番茄计划：等待接入\nHITA：支持日历文件导出，自动写入待接入\n微信客服：需要开通及配置\nQQ：待接入</string>
+    <string name="integration_default">番茄计划：需要电脑上的官网授权连接端\nHITA：需要安装并配置兼容版后台连接\n微信客服：需要开通及配置\nQQ：微信完成后再接入</string>
     <string name="security">连接口令由安卓密钥库保护；API Key 经 HTTPS 发往你的服务端，加密保存，不在 App 中持久保存。当前 App 用于配置服务，不会直接操作其他应用。</string>
     <string name="disconnected">尚未连接</string>
     <string name="connecting">正在连接…</string>
@@ -75,8 +75,11 @@
     <string name="clear_time">清空此时间</string>
     <string name="cancel_record">取消这项记录</string>
     <string name="cancel_record_help">该事项会保留在历史中，并停止后续处理。这个操作不会删除目标应用里已有的内容。</string>
-    <string name="record_conflict">记录已变化，请刷新详情后重试。</string>
+    <string name="record_conflict">记录已变化或连接端仍在处理，请刷新详情或稍后重试。</string>
     <string name="invalid_record">内容不完整或结束时间早于开始时间，请检查后重试。</string>
     <string name="upgrade_backend">当前服务不支持此操作，请更新后端后再试。</string>
     <string name="message_too_long">消息过长，请分成几条发送（每条最多8000字）。</string>
+    <string name="state_delivering">等待目标端确认</string>
+    <string name="state_written">目标端已确认写入</string>
+    <string name="retry_delivery">重试未确认的交付（等待当前尝试结束）</string>
 </resources>

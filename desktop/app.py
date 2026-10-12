@@ -143,7 +143,9 @@ def gui(root,check_ui=False):
                 elif kind=='address':address.set(value)
                 elif kind=='tunnel':tunnel.set(value)
                 elif kind=='pairing':show_pair(value)
-                elif kind in ('error','diagnosis','wechat'):info.delete('1.0','end');info.insert('end',value)
+                elif kind in ('error','diagnosis','wechat'):
+                    info.delete('1.0','end');info.insert('end',value)
+                    if kind=='error':state.set('操作未完成，请查看下方提示。')
         except queue.Empty:pass
         if getattr(controller,'closed',False):window.destroy();return
         window.after(100,tick)

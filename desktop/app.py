@@ -64,6 +64,16 @@ def gui(root,check_ui=False):
     button(row,'配置 / 更新免费中转',controller.setup_relay)
     button(row,'启动服务',controller.start);button(row,'停止服务',controller.stop)
     ttk.Button(row,text='取消配置',command=controller.cancel_relay_setup).pack(side='left')
+    domain_row=ttk.Frame(connection);domain_row.pack(fill='x',pady=(8,0))
+    ttk.Label(domain_row,text='自定义域名（可选）').pack(side='left',padx=(0,8))
+    custom=tk.StringVar(value='')
+    try:
+        import json
+        custom.set(json.loads((root/'data/relay.json').read_text(encoding='utf-8')).get('custom_address',''))
+    except (OSError,ValueError):pass
+    ttk.Entry(domain_row,textvariable=custom).pack(side='left',fill='x',expand=True,padx=(0,8))
+    save_domain=ttk.Button(domain_row,text='保存入口',command=lambda:async_action(lambda:controller.set_custom_relay(custom.get())))
+    save_domain.pack(side='left');buttons.append(save_domain)
     tunnel=tk.StringVar(value='首次先配置中转，再启动服务。之后打开本软件会自动启动。')
     ttk.Label(connection,textvariable=tunnel,wraplength=730).pack(anchor='w',pady=(7,0))
     phone=section('2 · 手机扫码（只需一次）')

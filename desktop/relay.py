@@ -11,10 +11,10 @@ import websocket
 
 def relay_url(value):
     url = urlsplit(value.strip())
-    if (url.scheme != "https" or not url.hostname or not url.hostname.endswith(".workers.dev")
+    if (url.scheme != "https" or not url.hostname
             or url.username or url.password or url.port not in (None, 443)
             or url.path not in ("", "/") or url.query or url.fragment):
-        raise ValueError("请输入部署后生成的 https://…workers.dev 地址")
+        raise ValueError("请输入有效的 HTTPS 中转根地址，例如 https://planner.example.com")
     return "https://" + url.hostname
 
 

@@ -52,6 +52,19 @@ class RelaySetupTests(unittest.TestCase):
         value=sanitize('https://dash.cloudflare.com/oauth2/auth?code=private-code&state=private-state\n{"access_token":"short-secret"}\nbridge-secret-private',secret='bridge-secret-private')
         for private in ['private-code','private-state','short-secret','bridge-secret-private']:self.assertNotIn(private,value)
 
+    def test_redeploy_retains_custom_domain(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);(root/'data').mkdir();(root/'relay').mkdir()
+            (root/'relay/worker.mjs').write_text('test');(root/'relay/wrangler.toml').write_text('name = "chat-planner-relay"\nworkers_dev = true')
+            old={'name':'chat-planner-'+'a'*12,'secret':'fake-known-secret','address':'https://old.example.workers.dev','custom_address':'https://planner.example.com'}
+            (root/'data/relay.json').write_text(json.dumps(old))
+            with patch('tools.relay_setup.find_command',return_value='npx'),patch('tools.relay_setup.run_command',return_value='https://new.example.workers.dev'):
+                self.assertEqual(deploy(root,lambda *e:None),'https://planner.example.com')
+            saved=json.loads((root/'data/relay.json').read_text(encoding='utf-8'))
+            self.assertEqual(saved['custom_address'],old['custom_address']);self.assertEqual(saved['secret'],old['secret'])
+            self.assertIn('custom_domain = true',(root/'data/relay-worker/wrangler.toml').read_text(encoding='utf-8'))
+            self.assertIn('planner.example.com',(root/'data/relay-worker/wrangler.toml').read_text(encoding='utf-8'))
+
     def test_steps_log_progress_and_retain_original_worker_identity(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);(root/'data').mkdir();(root/'relay').mkdir()

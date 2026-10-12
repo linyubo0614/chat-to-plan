@@ -47,6 +47,8 @@
 
 只在 App 里记录时，无需安装 Harness 或 dsh-im。希望在微信／QQ里记录时，再完成下面的助手接入步骤。
 
+若手机只有开 VPN 才能访问 `workers.dev`，可按 [自定义域名说明](docs/custom-domain.md) 购买域名、绑定原 Worker，并在关闭 VPN 时实测。0.7.2 支持电脑自定义入口和手机扫码／截图修复。
+
 ## 第一步：连接电脑与手机
 
 1. 电脑完整解压 Windows ZIP，运行 `ChatPlanner.exe`。

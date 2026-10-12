@@ -57,9 +57,9 @@ class Controller:
             if relay_config.get('address'):
                 from desktop.relay import RelayConnector
                 if self.relay is None:
-                    self.relay=RelayConnector(relay_config['address'],relay_config['secret'],self.emit)
+                    self.relay=RelayConnector(relay_config.get('custom_address') or relay_config['address'],relay_config['secret'],self.emit)
                     self.relay.start()
-                self.address=relay_config['address'];self.emit('address',self.address)
+                self.address=relay_config.get('custom_address') or relay_config['address'];self.emit('address',self.address)
             else:
                 self.emit('tunnel','请先配置免费固定中转，再生成手机配对二维码')
             if with_wechat:
@@ -74,6 +74,19 @@ class Controller:
         try:
             self.address=deploy(self.root,self.emit,self.setup_cancel);self.emit('address',self.address)
         finally:self.setup_in_progress=False
+
+    def set_custom_relay(self,value):
+        if self.running:raise SetupError('请先停止服务，再切换中转入口。')
+        from desktop.relay import relay_url
+        path=self.root/'data/relay.json'
+        if not path.exists():raise SetupError('请先完成 Cloudflare 中转配置，再绑定自定义域名。')
+        settings=json.loads(path.read_text(encoding='utf-8'))
+        try:address=relay_url(value) if value.strip() else ''
+        except ValueError:raise SetupError('请输入 HTTPS 根地址，例如 https://planner.example.com；不要填写 /healthz、控制台或配对链接。') from None
+        settings['custom_address']=address
+        temporary=path.with_suffix('.tmp');temporary.write_text(json.dumps(settings),encoding='utf-8');os.chmod(temporary,0o600);os.replace(temporary,path)
+        self.address=address or settings.get('address','');self.emit('address',self.address)
+        self.emit('diagnosis','入口已保存：'+self.address+'\n域名须先在 Cloudflare 激活。可点击“配置 / 更新免费中转”自动绑定域名，或先在控制台绑定到原 Worker，再启动服务。手机不开 VPN 访问 /healthz 显示 status=ok 后，再生成新二维码。清空该栏可恢复原 workers.dev 入口。')
 
     def cancel_relay_setup(self):
         if self.setup_in_progress:self.setup_cancel.set()

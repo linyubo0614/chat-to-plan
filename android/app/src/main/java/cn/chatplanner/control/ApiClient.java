@@ -12,6 +12,7 @@ final class ApiClient {
         final int status;
         ApiException(int status) { super("HTTP " + status); this.status = status; }
     }
+    static final class InvalidResponseException extends Exception { InvalidResponseException(){super("Invalid service response");} }
     static String validateBase(String input) {
         URI uri = URI.create(input.trim());
         boolean https = "https".equalsIgnoreCase(uri.getScheme());
@@ -21,9 +22,12 @@ final class ApiClient {
         return input.trim().replaceAll("/+$", "");
     }
     static JSONObject request(String base, String token, String method, String path, JSONObject payload) throws Exception {
+        return request(base,token,method,path,payload,15000);
+    }
+    static JSONObject request(String base,String token,String method,String path,JSONObject payload,int readTimeout) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) URI.create(validateBase(base) + path).toURL().openConnection();
         connection.setInstanceFollowRedirects(false);
-        connection.setConnectTimeout(15000); connection.setReadTimeout(15000);
+        connection.setConnectTimeout(15000); connection.setReadTimeout(readTimeout);
         connection.setRequestMethod(method);
         if (!token.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + token);
         connection.setRequestProperty("Accept", "application/json");
@@ -43,7 +47,7 @@ final class ApiClient {
                     if (out.size() + count > 2097152) throw new IllegalStateException("Response too large");
                     out.write(buffer, 0, count);
                 }
-                return new JSONObject(out.toString("UTF-8"));
+                try{return new JSONObject(out.toString("UTF-8"));}catch(org.json.JSONException error){throw new InvalidResponseException();}
             }
         } finally { connection.disconnect(); }
     }

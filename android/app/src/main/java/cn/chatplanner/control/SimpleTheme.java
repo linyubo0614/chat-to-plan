@@ -11,6 +11,7 @@ final class SimpleTheme {
     static final int PAPER=0xfff5f6f2, INK=0xff243c3b, GREEN=0xff29796b;
     static int dp(Activity a,int v){return Math.round(v*a.getResources().getDisplayMetrics().density);}
     static void window(Activity a){
+        a.getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         a.getWindow().setStatusBarColor(PAPER);a.getWindow().setNavigationBarColor(PAPER);
         a.getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
     }

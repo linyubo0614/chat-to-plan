@@ -50,6 +50,10 @@ Cloudflare 中转配置成功不代表 Harness 工具已经接入，也不代表
 - 保留当前 Cloudflare 账号、Worker 和 `workers.dev` 子域名；删除 Worker、换账号或更改子域名会影响已有连接。
 - 使用 Workers Free 时受其免费配额限制。本项目不自动开通付费计划；Cloudflare 额度与 Harness 模型的用量／费用是两回事。
 
+## 手机不开 VPN 无法访问 workers.dev
+
+如果手机开启 VPN 时 `/healthz` 正常，关闭后打不开，当前入口在该网络下不可直连。0.7.2 可以按 [自定义域名说明](custom-domain.md) 购买域名、接入 Cloudflare 并绑定原 Worker。绑定后先在手机不开 VPN 实测，验证成功再重新扫码；购买域名本身不保证可达。
+
 ## 五、配置失败时怎么处理
 
 | 提示或现象 | 检查与处理 |

@@ -31,13 +31,22 @@ def deploy(root, emit, cancel_event=None):
     secret = previous.get("secret") or secrets.token_urlsafe(32)
     # Retain the worker identity across failed setups so retry updates it.
     settings = {"name": name, "secret": secret, "address": previous.get("address", "")}
+    if previous.get("custom_address"):
+        from desktop.relay import relay_url
+        settings["custom_address"] = relay_url(previous["custom_address"])
     def save():
         temp = config_path.with_suffix(".tmp")
         with open(temp, "w", encoding="utf-8") as file: json.dump(settings, file)
         os.chmod(temp, 0o600); os.replace(temp, config_path)
     save()
     config = folder / "wrangler.toml"
-    config.write_text(config.read_text().replace('name = "chat-planner-relay"', 'name = "' + name + '"'), encoding="utf-8")
+    config_text=config.read_text().replace('name = "chat-planner-relay"','name = "'+name+'"')
+    if settings.get("custom_address"):
+        from urllib.parse import urlsplit
+        host=urlsplit(settings["custom_address"]).hostname
+        if not host.endswith(".workers.dev"):
+            config_text=config_text.replace("workers_dev = true",'workers_dev = true\nroutes = [{ pattern = '+json.dumps(host)+', custom_domain = true }]')
+    config.write_text(config_text,encoding="utf-8")
     try:
         npx = find_command("npx")
     except SetupError:
@@ -73,7 +82,7 @@ def deploy(root, emit, cancel_event=None):
     settings["address"] = matches[-1]
     save()
     emit("state", "固定中转已配置，请启动服务后扫码。今后保留 data 文件夹即可。")
-    return settings["address"]
+    return settings.get("custom_address") or settings["address"]
 
 
 def npx_args(command,arguments):

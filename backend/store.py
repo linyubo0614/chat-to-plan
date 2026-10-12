@@ -97,7 +97,11 @@ class Store:
     def _ingest(self, db, source, external_id, owner, text, context):
         existing = db.execute("SELECT * FROM messages WHERE source=? AND external_id=?", (source, external_id)).fetchone()
         if existing:
-            if existing["text"] != text or existing["owner"] != owner or json.loads(existing["context"]) != context:
+            previous_context = json.loads(existing["context"])
+            if source in {"harness", "openclaw"} and "interpretation" in previous_context:
+                # Expand defaults in saved plans so pre-upgrade retries remain valid.
+                previous_context["interpretation"] = Interpretation.model_validate(previous_context["interpretation"]).model_dump(mode="json")
+            if existing["text"] != text or existing["owner"] != owner or previous_context != context:
                 raise Conflict("Message ID reused with different content")
             return dict(existing), False
         key = uuid.uuid4().hex

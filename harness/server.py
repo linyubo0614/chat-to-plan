@@ -17,6 +17,8 @@ from scripts.generate_openclaw_schema import schema
 
 INSTRUCTIONS = (
     "用户要求记下具体信息、待办、课程或日程时调用 chat_planner_record；纯聊天不记录。"
+    "DDL、考试及重要日期用 kind=todo，record_type 分别为 ddl、exam、important_date，填写 task_date；"
+    "有明确时间再填写带时区的 due_at，不猜测时间。"
     "相对日期先通过 chat_planner_status 查服务器时间，使用返回时区。"
     "缺少课程日期或结束时间时追问，不猜测。每次新记录使用新的 operation_id，"
     "失败重试保持同一编号及内容，网络中断不代表保存失败。"
@@ -127,7 +129,7 @@ def dispatch(message, planner):
         supported = {"2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"}
         requested = params.get("protocolVersion")
         value = {"protocolVersion": requested if requested in supported else "2025-11-25",
-                 "capabilities": {"tools": {}}, "serverInfo": {"name": "chat-planner", "version": "0.6.0"},
+                 "capabilities": {"tools": {}}, "serverInfo": {"name": "chat-planner", "version": "0.7.0"},
                  "instructions": INSTRUCTIONS}
     elif method == "ping":
         value = {}

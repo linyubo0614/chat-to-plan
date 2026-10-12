@@ -21,11 +21,11 @@ public final class PairingActivity extends Activity {
     private boolean busy;
 
     @Override public void onCreate(Bundle state) {
-        super.onCreate(state);
+        super.onCreate(state);SimpleTheme.window(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(32,40,32,32);
-        root.setOnApplyWindowInsetsListener((v,i)->{ v.setPadding(32+i.getSystemWindowInsetLeft(),40+i.getSystemWindowInsetTop(),32+i.getSystemWindowInsetRight(),32+i.getSystemWindowInsetBottom());return i; });
-        status = new TextView(this); status.setTextSize(18); status.setText("扫描电脑“手机配对”二维码。成功后会保存连接，以后打开自动连接。"); root.addView(status);
+        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(SimpleTheme.dp(this,24),SimpleTheme.dp(this,24),SimpleTheme.dp(this,24),SimpleTheme.dp(this,24));root.setBackgroundColor(SimpleTheme.PAPER);
+        root.setOnApplyWindowInsetsListener((v,i)->{ v.setPadding(SimpleTheme.dp(this,24)+i.getSystemWindowInsetLeft(),SimpleTheme.dp(this,24)+i.getSystemWindowInsetTop(),SimpleTheme.dp(this,24)+i.getSystemWindowInsetRight(),SimpleTheme.dp(this,24)+i.getSystemWindowInsetBottom());return i; });
+        status = new TextView(this); status.setTextColor(SimpleTheme.INK);status.setTextSize(17);status.setPadding(0,0,0,SimpleTheme.dp(this,24)); status.setText("扫描电脑“手机配对”二维码。成功后会保存连接，以后打开自动连接。"); root.addView(status);
         scan = new Button(this); scan.setText("扫描配对二维码"); root.addView(scan);
         scan.setOnClickListener(v -> new IntentIntegrator(this).setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
             .setPrompt("扫描对话计划电脑端的配对二维码").setBeepEnabled(false).setOrientationLocked(false).initiateScan());
@@ -35,7 +35,7 @@ public final class PairingActivity extends Activity {
             new AlertDialog.Builder(this).setTitle("配对链接").setView(input).setNegativeButton("取消",null)
                 .setPositiveButton("连接",(d,w)->accept(input.getText().toString())).show();
         });
-        setContentView(root);
+        SimpleTheme.buttons(this,root);setContentView(root);
         if (state == null && getIntent().getData() != null) { String value=getIntent().getDataString(); getIntent().setData(null); accept(value); }
     }
 

@@ -40,7 +40,7 @@ public class PairingInstrumentedTest extends InstrumentationTestCase {
                 Thread.sleep(100);
             }
             assertFalse(token.isEmpty());assertFalse(token.equals("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
-            assertEquals("0.6.0",ApiClient.request(base,token,"GET","/v1/status",null).getString("version"));
+            assertEquals("0.7.0",ApiClient.request(base,token,"GET","/v1/status",null).getString("version"));
             assertEquals(token,new CredentialStore(getInstrumentation().getTargetContext()).token());
         } finally {getInstrumentation().runOnMainSync(activity::finish);}
     }

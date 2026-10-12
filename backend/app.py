@@ -39,7 +39,7 @@ def create_app(settings=None, parser=None, run_worker=True):
         yield
         worker.stop()
 
-    app = FastAPI(title="对话计划助手", version="0.6.0", lifespan=lifespan,
+    app = FastAPI(title="对话计划助手", version="0.7.0", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.store, app.state.worker, app.state.runtime = store, worker, runtime
     bearer = HTTPBearer(auto_error=False)
@@ -84,7 +84,7 @@ def create_app(settings=None, parser=None, run_worker=True):
 
     @app.get("/v1/status")
     def status(owner=Depends(authorize)):
-        return {"version":"0.6.0","deepseek_configured":runtime.public()["deepseek_key_configured"], "enabled":runtime.public()["enabled"], "wechat_configured":settings.wechat_enabled,
+        return {"version":"0.7.0","deepseek_configured":runtime.public()["deepseek_key_configured"], "enabled":runtime.public()["enabled"], "wechat_configured":settings.wechat_enabled,
                 "wechat_allowlist_configured":bool(settings.allowed_users),
                 "server_time":datetime.now(ZoneInfo(settings.timezone)).isoformat(),
                 "integrations":{"planner":"calendar_quadrants_and_memos", "hita":"compatible_bridge_unverified", "openclaw":"structured_tools", "harness":"structured_tools", "qq":"via_dsh_im"},
@@ -143,8 +143,8 @@ def create_app(settings=None, parser=None, run_worker=True):
     @app.get("/v1/planner/records")
     def records(kind: Literal["todo","memo"],day: date | None = None,
                 category: str | None = Query(default=None,max_length=80),q: str = Query(default="",max_length=200),
-                limit: int = Query(default=50,ge=1,le=200),before: int | None = Query(default=None,ge=1),owner=Depends(authorize)):
-        return planner.list(owner,kind,day,category,q,limit,before)
+                limit: int = Query(default=50,ge=1,le=200),before: int | None = Query(default=None,ge=1),dates_only: bool = False,owner=Depends(authorize)):
+        return planner.list(owner,kind,day,category,q,limit,before,dates_only)
 
     @app.get("/v1/planner/calendar")
     def calendar_overview(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),owner=Depends(authorize)):
@@ -152,6 +152,17 @@ def create_app(settings=None, parser=None, run_worker=True):
             return planner.calendar(owner,month)
         except ValueError as exc:
             raise HTTPException(422,"Invalid month") from exc
+
+    @app.get("/v1/planner/date-markers")
+    def date_markers(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),owner=Depends(authorize)):
+        try:
+            first = date.fromisoformat(month+"-01")
+            next_month = date(first.year+1,1,1) if first.month == 12 else date(first.year,first.month+1,1)
+        except ValueError as exc:
+            raise HTTPException(422,"Invalid month") from exc
+        with store.connection() as db:
+            rows = db.execute("SELECT task_date AS day,count(*) AS count FROM planner_records WHERE owner=? AND kind='todo' AND record_type!='task' AND completed=0 AND deleted=0 AND task_date>=? AND task_date<? GROUP BY task_date",(owner,first.isoformat(),next_month.isoformat())).fetchall()
+            return {"days":[dict(row) for row in rows]}
 
     @app.get("/v1/planner/categories")
     def categories(kind: Literal["todo","memo"]="memo",owner=Depends(authorize)):

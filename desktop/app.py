@@ -28,6 +28,14 @@ def gui(root,check_ui=False):
     events=queue.Queue();controller=Controller(root,lambda k,v:events.put((k,v)))
     window=tk.Tk();window.title('对话计划 · 电脑连接中心');window.geometry('820x800');window.minsize(720,690)
     style=ttk.Style();style.theme_use('clam');style.configure('TButton',font=('Microsoft YaHei UI',10),padding=(10,8));style.configure('TLabel',font=('Microsoft YaHei UI',10));style.configure('Title.TLabel',font=('Microsoft YaHei UI',22,'bold'))
+    window.configure(background='#f5f6f2')
+    style.configure('TFrame',background='#f5f6f2')
+    style.configure('TLabel',background='#f5f6f2',foreground='#243c3b')
+    style.configure('TButton',background='#e8efea',foreground='#29796b',borderwidth=0,relief='flat')
+    style.map('TButton',background=[('active','#dce8df'),('disabled','#eef0eb')],foreground=[('disabled','#8c9b94')])
+    style.configure('TLabelframe',background='#f5f6f2',bordercolor='#dfe5dc',relief='solid')
+    style.configure('TLabelframe.Label',background='#f5f6f2',foreground='#243c3b',font=('Microsoft YaHei UI',11,'bold'))
+    style.configure('TCheckbutton',background='#f5f6f2',foreground='#243c3b')
     frame=ttk.Frame(window,padding=20);frame.pack(fill='both',expand=True)
     ttk.Label(frame,text='对话计划',style='Title.TLabel').pack(anchor='w')
     ttk.Label(frame,text='微信 / QQ → DeepSeek Harness → 任务、备忘与 HITA').pack(anchor='w',pady=6)
@@ -80,7 +88,7 @@ def gui(root,check_ui=False):
             events.put(('diagnosis','计划工具已加入所选 Harness profile。请重新启动原来的 Harness，再在微信或 QQ 测试记录。旧配置备份在 data 中。'))
         async_action(install)
     b=ttk.Button(row,text='加入 Harness 配置',command=install_harness);b.pack(side='left');buttons.append(b)
-    info=tk.Text(frame,height=6,wrap='word',font=('Microsoft YaHei UI',10));info.pack(fill='both',expand=True,pady=8)
+    info=tk.Text(frame,height=6,wrap='word',font=('Microsoft YaHei UI',10),background='white',foreground='#243c3b',relief='flat',padx=12,pady=12);info.pack(fill='both',expand=True,pady=8)
     info.insert('end','首次：配置中转 → 启动服务 → 手机扫码 → 加入 Harness 配置。\n日常：保持电脑联网、此软件和原 Harness 运行；断线会自动重连。\n保留整个 data 文件夹，升级无需重新扫码。')
     def show_pair(data):
         nonlocal pair_window

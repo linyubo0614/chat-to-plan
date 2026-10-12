@@ -38,19 +38,19 @@ public class MainActivity extends Activity {
     private String connectedBase = "", connectedToken = "";
     private boolean busy = false;
     private volatile boolean destroyed = false;
-    private final int ink = Color.rgb(27, 47, 43), teal = Color.rgb(8, 127, 116);
+    private final int ink = SimpleTheme.INK, teal = SimpleTheme.GREEN;
 
     @Override public void onCreate(Bundle state) {
-        super.onCreate(state);
+        super.onCreate(state);SimpleTheme.window(this);
         credentials = new CredentialStore(this);
-        ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(Color.rgb(243, 247, 245));
+        ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(SimpleTheme.PAPER);
         LinearLayout root = column(); root.setPadding(dp(24), dp(28), dp(24), dp(32)); scroll.addView(root);
         // Respect system bars on devices enforcing edge-to-edge for target SDK 35.
         scroll.setOnApplyWindowInsetsListener((v, insets) -> {
             v.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets;
         });
-        TextView heading = label(R.string.app_name, 30); heading.setTypeface(null, Typeface.BOLD); root.addView(heading);
+        TextView heading = label(R.string.app_name, 26); heading.setTypeface(null, Typeface.BOLD); root.addView(heading);
         root.addView(label(R.string.subtitle, 15));
         status = label(R.string.disconnected, 14); status.setTextColor(teal); root.addView(status);
 
@@ -87,7 +87,7 @@ public class MainActivity extends Activity {
         configureHita.setOnClickListener(v->configureHita());
         Button shortcut=button(integrations,R.string.add_home_icon);shortcut.setOnClickListener(v->HomeShortcut.request(this));
         root.addView(label(R.string.security, 12));
-        setContentView(scroll); setBusy(false);
+        SimpleTheme.buttons(this,root);setContentView(scroll); setBusy(false);
         if (!credentials.server().isEmpty()) connect();
     }
 

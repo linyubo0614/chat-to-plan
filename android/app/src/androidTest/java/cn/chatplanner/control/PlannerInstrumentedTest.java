@@ -64,6 +64,38 @@ public class PlannerInstrumentedTest extends InstrumentationTestCase {
         assertNotNull(uri);
         try(java.io.OutputStream out=activity.getContentResolver().openOutputStream(uri)){image[0].compress(Bitmap.CompressFormat.PNG,100,out);}image[0].recycle();
     }
+    public void testImportantDatesCreateEditAndReopen() throws Exception {
+        CredentialStore credentials=new CredentialStore(getInstrumentation().getTargetContext());
+        credentials.save("http://10.0.2.2:8000",TOKEN);
+        getInstrumentation().getTargetContext().getSharedPreferences("home-icon",0).edit().putBoolean("offered",true).commit();
+        activity=(PlannerActivity)getInstrumentation().startActivitySync(new Intent(getInstrumentation().getTargetContext(),PlannerActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        try {
+            click("重要日期");await("把重要的日子，记在这里");click("＋ 记录日期");
+            getInstrumentation().runOnMainSync(()->{
+                for(View window:android.view.inspector.WindowInspector.getGlobalWindowViews()) {
+                    List<EditText> inputs=new ArrayList<>();for(View v:all(window))if(v instanceof EditText)inputs.add((EditText)v);
+                    if(inputs.size()==3){inputs.get(0).setText("CI 期末截止");inputs.get(1).setText("提交论文");inputs.get(2).setText("毕业");for(View v:all(window))if(v instanceof TextView&&"保存".contentEquals(((TextView)v).getText())){v.performClick();return;}}
+                }fail("Date editor missing");
+            });
+            await("CI 期末截止");await("今天");await("加入日历提醒");
+            JSONArray records=api("/v1/planner/records?kind=todo&dates_only=true").getJSONArray("records");JSONObject saved=null;
+            for(int i=0;i<records.length();i++)if("CI 期末截止".equals(records.getJSONObject(i).getString("title")))saved=records.getJSONObject(i);
+            assertNotNull(saved);assertEquals("ddl",saved.getString("record_type"));assertTrue(saved.isNull("due_at"));
+            screenshot("important-dates");click("编辑");
+            getInstrumentation().runOnMainSync(()->{
+                for(View window:android.view.inspector.WindowInspector.getGlobalWindowViews()) {
+                    boolean editor=false;for(View v:all(window))if(v instanceof android.widget.Spinner){((android.widget.Spinner)v).setSelection(2);editor=true;}
+                    if(editor){for(View v:all(window))if(v instanceof TextView&&"保存".contentEquals(((TextView)v).getText())){v.performClick();return;}}
+                }fail("Date type editor missing");
+            });
+            await("考试 · 毕业");
+            JSONObject updated=api("/v1/planner/records/"+saved.getString("id")).getJSONObject("record");assertEquals("exam",updated.getString("record_type"));assertEquals(1,updated.getInt("revision"));
+            getInstrumentation().runOnMainSync(()->activity.finish());getInstrumentation().waitForIdleSync();
+            activity=(PlannerActivity)getInstrumentation().startActivitySync(new Intent(getInstrumentation().getTargetContext(),PlannerActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            click("重要日期");await("CI 期末截止");await("考试 · 毕业");
+        }finally {getInstrumentation().runOnMainSync(()->activity.finish());}
+    }
+
     public void testWechatRecordsCalendarQuadrantsAndMemoEditing() throws Exception {
         CredentialStore credentials=new CredentialStore(getInstrumentation().getTargetContext());
         credentials.save("http://10.0.2.2:8000",TOKEN);

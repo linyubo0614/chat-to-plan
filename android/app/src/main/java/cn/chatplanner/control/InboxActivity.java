@@ -45,9 +45,9 @@ public class InboxActivity extends Activity {
     private volatile boolean destroyed;
 
     @Override public void onCreate(Bundle state) {
-        super.onCreate(state);
+        super.onCreate(state);SimpleTheme.window(this);
         credentials = new CredentialStore(this);
-        ScrollView scroll = new ScrollView(this); root = column(); root.setPadding(24, 24, 24, 24); scroll.addView(root);
+        ScrollView scroll = new ScrollView(this); root = column(); root.setPadding(SimpleTheme.dp(this,20),SimpleTheme.dp(this,20),SimpleTheme.dp(this,20),SimpleTheme.dp(this,20)); scroll.setBackgroundColor(SimpleTheme.PAPER); scroll.addView(root);
         scroll.setOnApplyWindowInsetsListener((v, insets) -> {
             v.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom()); return insets;
         });
@@ -72,10 +72,10 @@ public class InboxActivity extends Activity {
 
     private LinearLayout column() { LinearLayout v = new LinearLayout(this); v.setOrientation(LinearLayout.VERTICAL); return v; }
     private TextView text(LinearLayout parent, String value, int size) {
-        TextView view = new TextView(this); view.setText(value); view.setTextSize(size); view.setTextColor(Color.rgb(27, 47, 43)); view.setPadding(0, 10, 0, 10); parent.addView(view); return view;
+        TextView view = new TextView(this); view.setText(value); view.setTextSize(size); view.setTextColor(SimpleTheme.INK); view.setPadding(0, 10, 0, 10); parent.addView(view); return view;
     }
     private Button button(LinearLayout parent, String value, Runnable action) {
-        Button view = new Button(this); view.setText(value); view.setAllCaps(false);
+        Button view = new Button(this); view.setText(value); SimpleTheme.button(this,view);
         view.setOnClickListener(v -> { if (!busy) action.run(); }); parent.addView(view); return view;
     }
     private EditText field(LinearLayout parent, String caption, String value, boolean multiline) {

@@ -27,6 +27,7 @@ class Item(StrictModel):
     category: str = Field(default="其他",min_length=1,max_length=80)
     important: bool = False
     urgent: bool = False
+    record_type: Literal["task", "ddl", "exam", "important_date"] = "task"
     task_date: date | None = None
     starts_at: datetime | None = None
     ends_at: datetime | None = None
@@ -46,6 +47,12 @@ class Item(StrictModel):
 
     @model_validator(mode="after")
     def check_schedule(self):
+        if self.record_type != "task" and self.kind != "todo":
+            raise ValueError("Important dates use todo kind")
+        if self.record_type != "task" and not self.task_date and not self.due_at and not self.clarification:
+            self.clarification = "请补充截止日期或重要日期。"
+        if self.due_at and self.task_date and self.due_at.date() != self.task_date:
+            raise ValueError("Date and time must refer to the same day")
         if self.ends_at and not self.starts_at:
             raise ValueError("End time requires a start time")
         if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
@@ -91,8 +98,27 @@ class PlannerRecord(StrictModel):
     category: str = Field(default="其他",min_length=1,max_length=80)
     important: bool = False
     urgent: bool = False
+    record_type: Literal["task", "ddl", "exam", "important_date"] = "task"
+    due_at: datetime | None = None
     task_date: date | None = None
     completed: bool = False
+
+    @field_validator("due_at")
+    @classmethod
+    def aware_due(cls, value):
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("Dates must include timezone offsets")
+        return value
+
+    @model_validator(mode="after")
+    def check_date(self):
+        if self.kind == "memo" and (self.record_type != "task" or self.due_at is not None):
+            raise ValueError("Memos cannot have deadline metadata")
+        if self.record_type != "task" and self.task_date is None and self.due_at is None:
+            raise ValueError("Important dates require a date")
+        if self.due_at and self.task_date and self.due_at.date() != self.task_date:
+            raise ValueError("Date and time must refer to the same day")
+        return self
 
     @field_validator("title","category")
     @classmethod

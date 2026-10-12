@@ -17,3 +17,9 @@ GitHub checks 必须验证原生 Windows 安装及全部助手 DeepSeek 模型�
 - 对话计划 APK、lint 与配对 instrumentation 测试 APK 本地构建通过。HITA 兼容版 APK 构建通过，425 项上游单元测试报告无失败。
 - Windows 独立主程序和 MCP 程序、安卓模拟器配对操作、HITA Room 写入交由本提交的 GitHub Actions 验证；结果以该提交的实际运行状态为准。
 - 尚未代替用户完成：Cloudflare 账号登录与真实云部署、现有个人 Harness profile、微信／QQ、OPPO 真机相机和后台连接验收。
+
+## 0.7.0 简约界面与重要日期
+
+- 本地 58 项 Python 测试、8 项 Node 工具测试通过；覆盖重要日期字段持久化、带时区时间转换、按日期分页、月历标记、完成与删除、数据升级和旧操作重试兼容。
+- 安卓新增真实界面测试：创建 DDL、编辑为考试、数据库读回、重开页面持久化、重要日期截图。APK 与 lint 本地检查，模拟器操作和 Windows 窗口由同一提交的 Actions 验证。
+- 提醒通过系统日历新建入口完成，用户选择提醒并保存；未代验 OPPO 系统日历通知或个人微信／QQ账号。

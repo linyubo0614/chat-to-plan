@@ -66,13 +66,13 @@ class RelaySetupTests(unittest.TestCase):
                 return 'ok'
             with patch('tools.relay_setup.find_command',return_value='npx'),patch('tools.relay_setup.run_command',side_effect=cli):
                 self.assertEqual(deploy(root,lambda *e:events.append(e)),'https://new.example.workers.dev')
-            saved=json.loads((root/'data/relay.json').read_text())
+            saved=json.loads((root/'data/relay.json').read_text(encoding="utf-8"))
             self.assertEqual(saved['name'],original['name']);self.assertEqual(saved['secret'],original['secret'])
             self.assertEqual(len(commands),4)
-            log=(root/'data/relay-setup.log').read_text()
+            log=(root/'data/relay-setup.log').read_text(encoding="utf-8")
             self.assertNotIn('private-diagnostic-token',log);self.assertNotIn('fake-known-secret',log)
             self.assertTrue(any(e[0]=='setup_log' for e in events))
             def fail(*args,**kwargs):raise SetupError('test deployment failure')
             with patch('tools.relay_setup.find_command',return_value='npx'),patch('tools.relay_setup.run_command',side_effect=fail):
                 with self.assertRaisesRegex(SetupError,'relay-setup.log'):deploy(root,lambda *e:None)
-            self.assertEqual(json.loads((root/'data/relay.json').read_text()),saved)
+            self.assertEqual(json.loads((root/'data/relay.json').read_text(encoding="utf-8")),saved)

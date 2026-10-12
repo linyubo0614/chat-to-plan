@@ -17,7 +17,7 @@ BASE='http://127.0.0.1:8000'
 
 class Controller:
     def __init__(self,root,emit=lambda kind,value:None):
-        self.root=Path(root).resolve();self.emit=emit;self.children={};self.handles=[];self.address='';self.running=False;self.lock=threading.RLock();self.relay=None
+        self.root=Path(root).resolve();self.emit=emit;self.children={};self.handles=[];self.address='';self.running=False;self.lock=threading.RLock();self.relay=None;self.setup_cancel=threading.Event();self.setup_in_progress=False
     def prepare(self):
         data=self.root/'data';data.mkdir(exist_ok=True)
         if os.name=='nt':
@@ -70,7 +70,13 @@ class Controller:
         if self.running:raise SetupError('请先停止服务，再配置固定中转。')
         self.prepare()
         from tools.relay_setup import deploy
-        self.address=deploy(self.root,self.emit);self.emit('address',self.address)
+        self.setup_cancel.clear();self.setup_in_progress=True
+        try:
+            self.address=deploy(self.root,self.emit,self.setup_cancel);self.emit('address',self.address)
+        finally:self.setup_in_progress=False
+
+    def cancel_relay_setup(self):
+        if self.setup_in_progress:self.setup_cancel.set()
 
     def pairing(self):
         if not self.address:raise SetupError('请先配置固定中转并启动服务。')

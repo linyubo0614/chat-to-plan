@@ -63,11 +63,12 @@ def gui(root,check_ui=False):
     row=ttk.Frame(connection);row.pack(fill='x')
     button(row,'配置 / 更新免费中转',controller.setup_relay)
     button(row,'启动服务',controller.start);button(row,'停止服务',controller.stop)
+    ttk.Button(row,text='取消配置',command=controller.cancel_relay_setup).pack(side='left')
     tunnel=tk.StringVar(value='首次先配置中转，再启动服务。之后打开本软件会自动启动。')
     ttk.Label(connection,textvariable=tunnel,wraplength=730).pack(anchor='w',pady=(7,0))
     phone=section('2 · 手机扫码（只需一次）')
     ttk.Label(phone,text='手机打开“对话计划 → 设置 → 扫码连接电脑”，配对后自动保存。').pack(anchor='w')
-    ttk.Label(phone,text='再点手机里的“一键配置 HITA 连接”。电脑重启无需重新配对。').pack(anchor='w')
+    ttk.Label(phone,text='HITA 是可选扩展。需要课表同步时再点“一键配置 HITA 连接”。').pack(anchor='w')
     row=ttk.Frame(phone);row.pack(fill='x',pady=(8,0))
     button(row,'显示手机配对二维码',controller.pairing)
     button(row,'连接检查',controller.diagnose)
@@ -136,6 +137,9 @@ def gui(root,check_ui=False):
                     busy=False
                     for b in buttons:b.configure(state='normal')
                 elif kind=='state':state.set(value)
+                elif kind=='setup_log':
+                    info.insert('end','\n'+value);info.see('end')
+                    if int(info.index('end-1c').split('.')[0])>120:info.delete('1.0','20.0')
                 elif kind=='address':address.set(value)
                 elif kind=='tunnel':tunnel.set(value)
                 elif kind=='pairing':show_pair(value)

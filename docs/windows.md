@@ -24,6 +24,19 @@
 
 固定地址依赖你保留当前 Cloudflare Worker、账号及 `workers.dev` 子域名。换账号、改子域名或删除 Worker 会改变连接条件；免费配额用尽时也会暂时不可用。软件不自动开通付费计划。
 
+## 配置停在“正在部署”怎么办
+
+授权完成只代表登录步骤结束，不代表 Worker 已部署。Windows 修复包会显示四个阶段、实时部署输出及等待秒数，并支持“取消配置”。组件下载、部署、凭据写入各最多等待 180 秒，连续 90 秒无输出会停止；浏览器登录最多等待 300 秒。超时或取消只终止本次启动的部署进程，保留原 `data`、Worker 名称与连接信息。
+
+错误及进度会保存到程序旁的 `data/relay-setup.log`，其中会过滤登录链接与凭据。按错误提示排查：
+
+- `workers.dev subdomain`：先在 Cloudflare 控制台的 Workers 页面完成免费子域名开通。
+- `More than one account`：配置 `CLOUDFLARE_ACCOUNT_ID` 为目标 Cloudflare account ID，然后重新打开程序。
+- `fetch failed`、`ECONNRESET`、`ETIMEDOUT`：检查本机访问 npm 和 Cloudflare 的网络、代理与证书。
+- 授权错误：重新完成浏览器授权。
+
+旧版会隐藏输出，单阶段最长等待十分钟；它无法根据等待时长判断具体原因。升级完整 Windows 包并保留原 `data` 后重试。若要在旧版直接查看部署错误，可在 PowerShell 中进入程序的 `data\relay-worker` 文件夹，运行 `npx --yes wrangler@4.45.0 deploy --config .\wrangler.toml`。这条命令只诊断／执行 Worker 部署，不完成凭据写入，之后仍需由程序完成配置。
+
 ## 排查与验证
 
 - “连接检查”分别检查本机后端、固定 HTTPS 地址、最近 Harness 工具调用和可选 HITA 连接。未安装 HITA 时，“尚未收到”是正常状态，不影响基本功能。

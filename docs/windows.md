@@ -2,10 +2,12 @@
 
 0.7.0 使用你自己的 Cloudflare Workers 免费方案提供固定 `workers.dev` 地址。电脑主动连中转，手机无需额外 VPN，也不需要购买域名。正常重启、换网络或程序升级后沿用原地址和设备凭据。
 
+先阅读 [Cloudflare 使用说明](cloudflare.md)，完成账号注册、Workers 和 `workers.dev` 子域名首次开通。浏览器授权成功不代表中转已部署。
+
 ## 首次设置
 
 1. 完整解压 `chat-planner-windows.zip`，运行 `ChatPlanner.exe`。将旧版整个 `data` 文件夹保留在程序旁边。新版包含单独的 `ChatPlannerMcp.exe`，不要只下载主程序。
-2. 电脑需已有 Node.js 20.19+（建议沿用 Harness 所用 Node 版本）。点击“配置 / 更新免费中转”，按浏览器提示登录你自己的 Cloudflare 账号并授权。若首次使用 Workers，先在 Cloudflare 控制台开通 Workers 和免费的 `workers.dev` 子域名，再重试。账号有多个 Cloudflare account 时，可先在系统环境配置 `CLOUDFLARE_ACCOUNT_ID` 指定目标账号。
+2. 电脑需已有 Node.js 20.19+（建议沿用 Harness 所用 Node 版本）。先按 [Cloudflare 使用说明](cloudflare.md) 完成 Workers 和免费的 `workers.dev` 子域名开通，再点击“配置 / 更新免费中转”，按浏览器提示登录你自己的 Cloudflare 账号并授权。账号有多个 Cloudflare account 时，可先在系统环境配置 `CLOUDFLARE_ACCOUNT_ID` 指定目标账号。
 3. 软件自动部署当前账号内一个独立中转。部署使用固定版本 Wrangler，首次会下载依赖，可能需要几分钟。成功后窗口显示固定 HTTPS 地址。
 4. 点击“启动服务”，等待“固定中转已连接”。点击“显示手机配对二维码”。
 5. 手机安装新版“对话计划”，打开“设置 → 扫码连接电脑（只需一次）”，扫描并确认。二维码五分钟有效、只能用一次。也可在扫码页粘贴电脑复制的配对链接。

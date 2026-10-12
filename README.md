@@ -43,12 +43,14 @@
 
 跨网络连接使用你自己的 Cloudflare 免费 Workers 中转，无需购买域名。没有账号时先 [注册 Cloudflare](https://dash.cloudflare.com/sign-up)，验证邮箱，并按控制台提示开通 Workers 与免费的 `workers.dev` 子域名。项目不会自动开通付费计划，实际使用受 Cloudflare 免费额度和网络可达性限制。
 
+**Cloudflare 授权成功不代表中转配置完成。** 首次使用必须先在控制台开通 Workers 与 `workers.dev` 子域名，再回到电脑程序授权部署。完整操作与错误排查见 [Cloudflare 使用说明](docs/cloudflare.md)。
+
 只在 App 里记录时，无需安装 Harness 或 dsh-im。希望在微信／QQ里记录时，再完成下面的助手接入步骤。
 
 ## 第一步：连接电脑与手机
 
 1. 电脑完整解压 Windows ZIP，运行 `ChatPlanner.exe`。
-2. 点击“配置 / 更新免费中转”，在浏览器登录自己的 Cloudflare 账号并授权。首次下载部署依赖可能需要几分钟。
+2. 先按 [Cloudflare 使用说明](docs/cloudflare.md) 完成 Workers 与子域名首次开通，再点击“配置 / 更新免费中转”，在浏览器登录自己的账号并授权。首次下载部署依赖可能需要几分钟。
 3. 配置成功后点击“启动服务”，等待“固定中转已连接”，再点击“显示手机配对二维码”。
 4. 手机安装安卓 APK，打开“对话计划 → 设置 → 扫码连接电脑”，扫描二维码并确认。
 5. 回到 App，就可以添加任务、写备忘和记录重要日期。**此时不需要配置 HITA。**
@@ -153,6 +155,6 @@ bash scripts/start.sh
 
 本机服务默认监听 `127.0.0.1:8000`。手机通过固定中转连接；Harness 的 MCP 工具在同一电脑直接调用本机服务。旧 OpenClaw 接口保留，可按文档单独配置。
 
-[固定中转](docs/relay.md) · [API 与备份](docs/deployment.md) · [安卓构建](docs/android.md) · [OpenClaw 旧接入](docs/openclaw.md) · [验证记录](docs/validation.md)
+[Cloudflare 使用说明](docs/cloudflare.md) · [固定中转](docs/relay.md) · [API 与备份](docs/deployment.md) · [安卓构建](docs/android.md) · [OpenClaw 旧接入](docs/openclaw.md) · [验证记录](docs/validation.md)
 
 项目已验证后端、Windows 独立程序、安卓构建与模拟器界面、中转/MCP 和可选 HITA 数据写入。个人 Cloudflare 部署、实际微信／QQ账号及手机通知仍需在各自设备上验收。

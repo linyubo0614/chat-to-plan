@@ -1,5 +1,7 @@
 # 固定 Cloudflare 中转
 
+新用户先阅读 [Cloudflare 使用说明](cloudflare.md)，完成 Workers 与 `workers.dev` 首次开通、授权部署和手机配对。本页介绍中转实现与开发验证。
+
 每个 Windows 安装使用独立 Worker 和一个 Durable Object。公共 `/v1/*` 请求转发给电脑已有后端，后端验证设备凭据；`/bridge` 只接受中转密钥认证的电脑 WebSocket。后端仍只监听本机。中转不持久保存任务正文、模型 Key 或手机凭据；HTTPS 在 Cloudflare 终止，中转处理期间能接触请求内容。
 
 `relay/wrangler.toml` 使用 SQLite Durable Object 迁移，适用于 Workers Free。安装器固定 Wrangler 4.45.0，不自动改变账号计费方案。免费额度、Cloudflare可达性及电脑在线状态仍影响可用性。

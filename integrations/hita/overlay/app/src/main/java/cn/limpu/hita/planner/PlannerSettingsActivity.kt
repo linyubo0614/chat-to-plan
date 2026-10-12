@@ -26,7 +26,7 @@ class PlannerSettingsActivity : Activity() {
             text = "随手记事独立课表"; isChecked = PlannerAccess.defaultTableId in existing || existing.isEmpty(); root.addView(this)
         }
         val result = TextView(this).apply { text = if (existing.isEmpty()) "尚未授权" else "已授权 ${existing.size} 个课表"; setPadding(0, 20, 0, 20) }
-        val save = Button(this).apply { text = "保存授权" }; val revoke = Button(this).apply { text = "撤销全部授权" }
+        val save = Button(this).apply { text = "保存授权"; isEnabled = false }; val revoke = Button(this).apply { text = "撤销全部授权" }
         root.addView(result); root.addView(save); root.addView(revoke)
         save.setOnClickListener {
             val selected = choices.filterValues { it.isChecked }.keys
@@ -42,11 +42,14 @@ class PlannerSettingsActivity : Activity() {
         Thread {
             try {
                 val tables = AppDatabase.getDatabase(applicationContext).timetableDao().getTimetablesSync()
-                runOnUiThread { if (!isDestroyed) tables.filter { it.id != PlannerAccess.defaultTableId }.forEach { table ->
-                    val checkbox = CheckBox(this).apply { text = table.name ?: "未命名课表"; isChecked = table.id in existing }
-                    choices[table.id] = checkbox; root.addView(checkbox, root.indexOfChild(result))
+                runOnUiThread { if (!isDestroyed) {
+                    tables.filter { it.id != PlannerAccess.defaultTableId }.forEach { table ->
+                        val checkbox = CheckBox(this).apply { text = table.name ?: "未命名课表"; isChecked = table.id in access.tables() }
+                        choices[table.id] = checkbox; root.addView(checkbox, root.indexOfChild(result))
+                    }
+                    save.isEnabled = true
                 } }
-            } catch (_: Exception) { runOnUiThread { if (!isDestroyed) result.text = "未能读取现有课表，可先授权独立课表。" } }
+            } catch (_: Exception) { runOnUiThread { if (!isDestroyed) result.text = "未能读取课表，请重新打开此页面后授权。已有授权保持不变。" } }
         }.start()
     }
 }

@@ -80,8 +80,6 @@ jobs:
   hita:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    env:
-      PLANNER_PREVIEW_KEYSTORE: ${{ runner.temp }}/preview-signing/preview.keystore
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5

@@ -20,6 +20,11 @@ def initialize(db,timezone):
         CREATE INDEX IF NOT EXISTS planner_day ON planner_records(owner,kind,task_date,deleted);
         CREATE INDEX IF NOT EXISTS planner_category ON planner_records(owner,kind,category,deleted);
     """)
+    columns = {row["name"] for row in db.execute("PRAGMA table_info(planner_records)")}
+    if "record_type" not in columns:
+        db.execute("ALTER TABLE planner_records ADD COLUMN record_type TEXT NOT NULL DEFAULT 'task'")
+    if "due_at" not in columns:
+        db.execute("ALTER TABLE planner_records ADD COLUMN due_at TEXT")
     # Preserve saved assistant content when replacing the third-party destination.
     # This imports only our own database, never the user's Tomato private data.
     rows = db.execute("SELECT t.*,m.owner FROM tasks t JOIN messages m ON t.message_id=m.id WHERE t.target='tomato'").fetchall()
@@ -34,19 +39,20 @@ def initialize(db,timezone):
 
 
 def values(record,timezone):
-    day = record.task_date
+    due = record.due_at.astimezone(ZoneInfo(timezone)) if record.due_at else None
+    day = due.date() if due else record.task_date
     if record.kind == "todo" and day is None:
-        due = getattr(record,"due_at",None)
-        day = due.astimezone(ZoneInfo(timezone)).date() if due else datetime.now(ZoneInfo(timezone)).date()
+        day = datetime.now(ZoneInfo(timezone)).date()
     return (record.kind,record.title,record.body,record.category,int(record.important),int(record.urgent),
-            day.isoformat() if record.kind == "todo" and day else None,int(getattr(record,"completed",False)))
+            day.isoformat() if record.kind == "todo" and day else None,int(getattr(record,"completed",False)),
+            record.record_type,due.isoformat() if record.kind == "todo" and due else None)
 
 
 def save_task(db,key,owner,item,timezone):
     now = time.time()
     db.execute("""INSERT OR IGNORE INTO planner_records
-        (id,owner,source_task_id,kind,title,body,category,important,urgent,task_date,completed,created,updated)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",(key,owner,key,*values(item,timezone),now,now))
+        (id,owner,source_task_id,kind,title,body,category,important,urgent,task_date,completed,record_type,due_at,created,updated)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(key,owner,key,*values(item,timezone),now,now))
 
 
 def public(row):
@@ -65,6 +71,11 @@ class Planner:
     def create(self,owner,body):
         from .store import Conflict
         payload = body.model_dump(mode="json",exclude={"record_id"})
+        # Default metadata must not invalidate retries of records from older versions.
+        if payload["record_type"] == "task":
+            payload.pop("record_type")
+        if payload["due_at"] is None:
+            payload.pop("due_at")
         fingerprint = hashlib.sha256(json.dumps(payload,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
         with self.store.connection() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -76,8 +87,8 @@ class Planner:
                 return {"record":public(existing),"duplicate":True,"deleted":bool(existing["deleted"])}
             now = time.time()
             db.execute("""INSERT INTO planner_records
-                (id,owner,creation_hash,kind,title,body,category,important,urgent,task_date,completed,created,updated)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",(body.record_id,owner,fingerprint,*values(body,self.store.timezone),now,now))
+                (id,owner,creation_hash,kind,title,body,category,important,urgent,task_date,completed,record_type,due_at,created,updated)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(body.record_id,owner,fingerprint,*values(body,self.store.timezone),now,now))
             row = db.execute("SELECT * FROM planner_records WHERE id=?",(body.record_id,)).fetchone()
             return {"record":public(row),"duplicate":False,"deleted":False}
 
@@ -86,9 +97,11 @@ class Planner:
             row = db.execute("SELECT * FROM planner_records WHERE id=? AND owner=? AND deleted=0",(key,owner)).fetchone()
             return public(row) if row else None
 
-    def list(self,owner,kind,day=None,category=None,q="",limit=50,before=None):
+    def list(self,owner,kind,day=None,category=None,q="",limit=50,before=None,dates_only=False):
         terms = ["owner=?","kind=?","deleted=0"]
         parameters = [owner,kind]
+        if dates_only:
+            terms.append("record_type!='task'")
         if day:
             terms.append("task_date=?");parameters.append(day.isoformat())
         if category is not None:
@@ -98,10 +111,19 @@ class Planner:
             escaped = q.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")
             parameters.extend(["%"+escaped+"%"]*2)
         if before is not None:
-            terms.append("rowid<?");parameters.append(before)
+            if dates_only:
+                with self.store.connection() as db:
+                    cursor = db.execute("SELECT task_date FROM planner_records WHERE rowid=? AND owner=? AND kind=?",(before,owner,kind)).fetchone()
+                if cursor is None:
+                    return {"records":[],"next_cursor":None}
+                terms.append("(task_date>? OR (task_date=? AND rowid<?))")
+                parameters.extend([cursor["task_date"],cursor["task_date"],before])
+            else:
+                terms.append("rowid<?");parameters.append(before)
         parameters.append(limit+1)
         with self.store.connection() as db:
-            rows = db.execute("SELECT rowid AS cursor,* FROM planner_records WHERE "+" AND ".join(terms)+" ORDER BY rowid DESC LIMIT ?",parameters).fetchall()
+            order = "task_date ASC,rowid DESC" if dates_only else "rowid DESC"
+            rows = db.execute("SELECT rowid AS cursor,* FROM planner_records WHERE "+" AND ".join(terms)+" ORDER BY "+order+" LIMIT ?",parameters).fetchall()
             more = len(rows)>limit
             records = [public(row) for row in rows[:limit]]
             return {"records":records,"next_cursor":records[-1]["cursor"] if more else None}
@@ -133,7 +155,7 @@ class Planner:
                 db.execute("UPDATE planner_records SET deleted=1,revision=revision+1,updated=? WHERE id=?",(time.time(),key))
             else:
                 db.execute("""UPDATE planner_records SET kind=?,title=?,body=?,category=?,important=?,urgent=?,
-                    task_date=?,completed=?,revision=revision+1,updated=? WHERE id=?""",(*values(body,self.store.timezone),time.time(),key))
+                    task_date=?,completed=?,record_type=?,due_at=?,revision=revision+1,updated=? WHERE id=?""",(*values(body,self.store.timezone),time.time(),key))
             if current["source_task_id"]:
                 if delete:
                     db.execute("UPDATE tasks SET status='cancelled',reason='已从对话计划移除。',revision=revision+1 WHERE id=?",(current["source_task_id"],))

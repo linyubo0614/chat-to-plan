@@ -8,8 +8,8 @@ index ca3e65f..a1c180e 100644
      ? Integer.parseInt(envVersionCode)
 -    : 2026093005
 -def appVersionNameValue = "3.0.3"
-+    : 2026101101
-+def appVersionNameValue = "3.0.3-planner.2"
++    : 2026101102
++def appVersionNameValue = "3.0.3-planner.3"
  
  def keystorePropertiesFile = rootProject.file("keystore.properties")
  def keystoreProperties = new Properties()

@@ -98,6 +98,7 @@ jobs:
           $Standalone = Join-Path $env:RUNNER_TEMP 'Standalone 中文 path'
           New-Item -ItemType Directory -Path $Standalone -Force | Out-Null
           Copy-Item dist/ChatPlanner.exe $Standalone
+          Copy-Item dist/ChatPlannerMcp.exe $Standalone
           $Exe = Join-Path $Standalone 'ChatPlanner.exe'
           $Ui = Start-Process $Exe -ArgumentList '--check-ui' -PassThru
           if (-not $Ui.WaitForExit(30000) -or $Ui.ExitCode -ne 0) { throw 'Standalone desktop UI failed' }
@@ -113,6 +114,8 @@ jobs:
             $Token = (Get-Content (Join-Path $Standalone 'data/api-token') -Raw).Trim()
             $Status = Invoke-RestMethod 'http://127.0.0.1:8000/v1/status' -Headers @{Authorization="Bearer $Token"}
             if ($Status.integrations.planner -ne 'calendar_quadrants_and_memos') { throw 'Standalone runtime wrong' }
+            python scripts/verify_mcp_exe.py $Standalone
+            if ($LASTEXITCODE -ne 0) { throw 'Standalone MCP server failed' }
             $Record = '{"record_id":"dddddddddddddddddddddddddddddddd","kind":"memo","title":"standalone desktop test","category":"test","body":"real executable"}'
             $Saved = Invoke-RestMethod 'http://127.0.0.1:8000/v1/planner/records' -Method POST -Headers @{Authorization="Bearer $Token"} -ContentType 'application/json' -Body $Record
             if ($Saved.record.title -ne 'standalone desktop test') { throw 'Standalone real save failed' }
@@ -127,6 +130,8 @@ jobs:
           if (-not (Test-Path (Join-Path $Root 'ChatPlanner.exe'))) { throw 'Desktop software missing from ZIP' }
           if (-not (Test-Path (Join-Path $Root 'openclaw/record.schema.json'))) { throw 'Plugin missing from ZIP' }
           if (-not (Test-Path (Join-Path $Root 'windows/install-openclaw.cmd'))) { throw 'Installer missing from ZIP' }
+          if (-not (Test-Path (Join-Path $Root 'ChatPlannerMcp.exe'))) { throw 'MCP executable missing from ZIP' }
+          if (-not (Test-Path (Join-Path $Root 'relay/worker.mjs'))) { throw 'Cloud relay missing from ZIP' }
           if (Test-Path (Join-Path $Root 'data')) { throw 'Private data packaged' }
       - uses: actions/upload-artifact@v4
         with:
@@ -134,6 +139,7 @@ jobs:
           path: |
             chat-planner-windows.zip
             dist/ChatPlanner.exe
+            dist/ChatPlannerMcp.exe
           if-no-files-found: error
   backend:
     runs-on: ubuntu-24.04
@@ -259,3 +265,33 @@ jobs:
           name: hita-planner-debug-apk
           path: ${{ runner.temp }}/hita-planner/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+  relay-mcp:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - run: pip install -r requirements.lock
+      - name: Install pinned relay runtime and Harness MCP SDK
+        run: npm install --prefix "$RUNNER_TEMP/relay-test" --no-audit --no-fund wrangler@4.45.0 @modelcontextprotocol/client@2.0.0
+      - name: Verify real relay and stdio MCP traffic
+        env:
+          WRANGLER_SEND_METRICS: 'false'
+          NO_PROXY: '127.0.0.1,localhost'
+        run: |
+          mkdir -p "$RUNNER_TEMP/relay-runtime"
+          cp relay/* "$RUNNER_TEMP/relay-runtime/"
+          "$RUNNER_TEMP/relay-test/node_modules/.bin/wrangler" dev --config "$RUNNER_TEMP/relay-runtime/wrangler.toml" --local --port 8791 --var BRIDGE_SECRET:synthetic-local-bridge-test --show-interactive-dev-session=false > "$RUNNER_TEMP/relay.log" 2>&1 &
+          RELAY_PID=$!
+          trap 'kill "$RELAY_PID" || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -s http://127.0.0.1:8791/healthz > /dev/null; then break; fi
+            sleep 1
+          done
+          MCP_SDK_ROOT="$RUNNER_TEMP/relay-test" python -m scripts.verify_relay --mcp

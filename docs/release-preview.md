@@ -1,11 +1,7 @@
-对话计划 0.5.1 预览版：修复 DeepSeek 旧模型名阻止切换的问题。
+本预览版增加 DeepSeek Harness MCP 计划工具，复用已有 dsh-im 微信／QQ连接；提供免费 workers.dev 固定中转、首次扫码配对，以及一键配置 HITA。后续正常重启保留连接，无需反复填写地址和口令。
 
-- 0.5.0 固定 deepseek-chat，但该模型已退役。新版读取账号可用列表，优先 deepseek-flash，其次 deepseek-v4-flash 或 deepseek-v4-pro，并验证实际工具调用。
-- 全部助手、子助手和辅助模型统一切换到选定 DeepSeek；清除 GPT 回退，默认关闭深度思考以优先低延迟。失败时不应用模型配置，区分 Key、余额和繁忙错误。
-- 连接检查分别显示微信网关、配置模型和保存工具状态；手机设置支持当前模型名，避免保存设置退回旧名。
+完整下载 Windows ZIP（含 ChatPlanner.exe 与 ChatPlannerMcp.exe），保留整个 data。首次在电脑点击“配置 / 更新免费中转”，在浏览器登录自己的 Cloudflare 账号；成功后启动服务、手机扫码。Harness 模型和 IM 授权继续使用现有配置，按软件入口加入计划工具。
 
-更新 Windows ZIP 或 ChatPlanner.exe，先退出旧连接中心并保留整个 data 文件夹。启动新版，验证并应用 DeepSeek，重启微信助手，微信发 /new，再发 /status 核对实际模型。Key 只填自己的电脑软件。
+手机需新版对话计划 APK；HITA 使用 3.0.3-planner.3。预览签名可能不能覆盖旧安装，重装前保存草稿、导出并验证 HITA 课表备份。
 
-手机 APK 更新后会保留电脑已选择模型。预览 APK 签名可能不能覆盖旧版，先保存未确认草稿。此次 HITA 功能无变化，无需更新 HITA；若需要重装必须先导出并确认课表备份，不能直接卸载。
-
-[完整操作说明](https://github.com/linyubo0614/vibecoding_test_01/blob/main/docs/windows.md)。仅复用同一提交通过全部检查的构建。框架模拟模型和模拟器测试不能代替用户真实 DeepSeek/微信/OPPO验收。
+[Windows 操作](https://github.com/linyubo0614/vibecoding_test_01/blob/main/docs/windows.md) · [Harness 接入](https://github.com/linyubo0614/vibecoding_test_01/blob/main/docs/harness.md)。真实 Cloudflare 部署、个人微信／QQ会话及 OPPO 真机仍需按文档验收。

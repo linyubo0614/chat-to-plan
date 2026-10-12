@@ -54,6 +54,17 @@
                 "title": "Urgent",
                 "type": "boolean"
               },
+              "record_type": {
+                "default": "task",
+                "enum": [
+                  "task",
+                  "ddl",
+                  "exam",
+                  "important_date"
+                ],
+                "title": "Record Type",
+                "type": "string"
+              },
               "task_date": {
                 "anyOf": [
                   {

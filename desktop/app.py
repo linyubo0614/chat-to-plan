@@ -21,67 +21,112 @@ def serve(root):
 
 def gui(root,check_ui=False):
     import tkinter as tk
-    from tkinter import ttk,messagebox
+    from tkinter import ttk,messagebox,filedialog
+    import time
     from desktop.controller import Controller
-    from tools.openclaw_config import SetupError,find_command,command_args
-    import subprocess
+    from tools.openclaw_config import SetupError
     events=queue.Queue();controller=Controller(root,lambda k,v:events.put((k,v)))
-    window=tk.Tk();window.title('对话计划 · 电脑连接中心');window.geometry('780x720');window.minsize(650,620);window.configure(bg='#f6f5f0')
-    style=ttk.Style();style.theme_use('clam');style.configure('TFrame',background='#f6f5f0');style.configure('TLabel',background='#f6f5f0',foreground='#243c3b',font=('Microsoft YaHei UI',11));style.configure('TButton',font=('Microsoft YaHei UI',10),padding=(12,9));style.configure('Title.TLabel',font=('Microsoft YaHei UI',24,'bold'));style.configure('TLabelframe',background='#f6f5f0');style.configure('TLabelframe.Label',background='#f6f5f0',font=('Microsoft YaHei UI',11,'bold'))
-    frame=ttk.Frame(window,padding=24);frame.pack(fill='both',expand=True)
-    ttk.Label(frame,text='对话计划',style='Title.TLabel').pack(anchor='w');ttk.Label(frame,text='微信记录 → 每日任务、分类备忘和 HITA',padding=(0,4)).pack(anchor='w')
-    state=tk.StringVar(value='尚未启动');ttk.Label(frame,textvariable=state).pack(anchor='w',pady=8)
-    busy=False
-    buttons=[]
+    window=tk.Tk();window.title('对话计划 · 电脑连接中心');window.geometry('820x800');window.minsize(720,690)
+    style=ttk.Style();style.theme_use('clam');style.configure('TButton',font=('Microsoft YaHei UI',10),padding=(10,8));style.configure('TLabel',font=('Microsoft YaHei UI',10));style.configure('Title.TLabel',font=('Microsoft YaHei UI',22,'bold'))
+    window.configure(background='#f5f6f2')
+    style.configure('TFrame',background='#f5f6f2')
+    style.configure('TLabel',background='#f5f6f2',foreground='#243c3b')
+    style.configure('TButton',background='#e8efea',foreground='#29796b',borderwidth=0,relief='flat')
+    style.map('TButton',background=[('active','#dce8df'),('disabled','#eef0eb')],foreground=[('disabled','#8c9b94')])
+    style.configure('TLabelframe',background='#f5f6f2',bordercolor='#dfe5dc',relief='solid')
+    style.configure('TLabelframe.Label',background='#f5f6f2',foreground='#243c3b',font=('Microsoft YaHei UI',11,'bold'))
+    style.configure('TCheckbutton',background='#f5f6f2',foreground='#243c3b')
+    frame=ttk.Frame(window,padding=20);frame.pack(fill='both',expand=True)
+    ttk.Label(frame,text='对话计划',style='Title.TLabel').pack(anchor='w')
+    ttk.Label(frame,text='微信 / QQ → DeepSeek Harness → 任务、备忘与 HITA').pack(anchor='w',pady=6)
+    state=tk.StringVar(value='准备就绪');ttk.Label(frame,textvariable=state).pack(anchor='w',pady=6)
+    buttons=[];busy=False;pair_window=None
     def async_action(fn):
         nonlocal busy
         if busy:return
         busy=True
-        for button in buttons:button.configure(state='disabled')
+        for b in buttons:b.configure(state='disabled')
         def run():
             try:fn()
             except SetupError as e:events.put(('error',str(e)))
-            except Exception:events.put(('error','操作未完成。请点击连接检查，并确认程序位于可写入的文件夹。'))
+            except Exception:events.put(('error','操作未完成，请检查网络、程序文件和 data 文件夹是否可写。'))
             finally:events.put(('done',''))
         threading.Thread(target=run,daemon=True).start()
-    def add_button(parent,label,fn):
+    def button(parent,label,fn):
         b=ttk.Button(parent,text=label,command=lambda:async_action(fn));b.pack(side='left',padx=(0,8));buttons.append(b);return b
-    row=ttk.Frame(frame);row.pack(fill='x',pady=8)
-    add_button(row,'启动全部',controller.start);add_button(row,'停止',controller.stop);add_button(row,'连接检查',controller.diagnose)
-    connection=ttk.LabelFrame(frame,text='手机连接',padding=14);connection.pack(fill='x',pady=8)
-    address=tk.StringVar(value='启动后自动显示 HTTPS 地址');ttk.Entry(connection,textvariable=address,state='readonly').pack(fill='x')
-    tunnel=tk.StringVar(value='手机通道未启动');ttk.Label(connection,textvariable=tunnel).pack(anchor='w',pady=5)
+    def section(title):
+        box=ttk.LabelFrame(frame,text=title,padding=12);box.pack(fill='x',pady=7);return box
+    connection=section('1 · 固定手机连接（首次配置）')
+    ttk.Label(connection,text='无需域名。首次在浏览器登录 Cloudflare，部署你自己的免费中转。').pack(anchor='w')
+    address=tk.StringVar(value='尚未配置固定地址')
+    ttk.Entry(connection,textvariable=address,state='readonly').pack(fill='x',pady=7)
     row=ttk.Frame(connection);row.pack(fill='x')
-    def copy(value):window.clipboard_clear();window.clipboard_append(value);window.update();state.set('已复制，请只填入你自己的手机 App')
-    ttk.Button(row,text='复制地址',command=lambda:copy(controller.address) if controller.address else None).pack(side='left',padx=(0,8))
-    def copy_token():
-        try:copy((root/'data/api-token').read_text().strip())
-        except OSError:messagebox.showinfo('连接口令','请先启动服务')
-    ttk.Button(row,text='复制连接口令',command=copy_token).pack(side='left',padx=(0,8))
-    add_button(row,'写入手机测试备忘',controller.write_test)
-    claw=ttk.LabelFrame(frame,text='微信助手 · DeepSeek',padding=14);claw.pack(fill='x',pady=8)
-    ttk.Label(claw,text='在这里填写 DeepSeek API Key，应用到全部助手和子助手。').pack(anchor='w')
-    key=ttk.Entry(claw,show='•');key.pack(fill='x',pady=8)
-    def save_key():
-        value=key.get().strip();key.delete(0,'end')
-        if not value:messagebox.showinfo('DeepSeek','请先填写 API Key');return
-        async_action(lambda:controller.deepseek(value))
-    row=ttk.Frame(claw);row.pack(fill='x')
-    b=ttk.Button(row,text='验证并应用 DeepSeek',command=save_key);b.pack(side='left',padx=(0,8));buttons.append(b)
-    add_button(row,'安装 / 修复保存工具',controller.install_tools);add_button(row,'重启微信助手',controller.restart_gateway)
-    wechat=tk.StringVar(value='首次配置：启动全部 → 填 Key → 安装工具 → 重启助手 → 微信发 /new')
-    ttk.Label(claw,textvariable=wechat,wraplength=660).pack(anchor='w',pady=(8,0))
-    info=tk.Text(frame,height=7,bg='#ffffff',fg='#243c3b',relief='flat',font=('Microsoft YaHei UI',10),wrap='word');info.pack(fill='both',expand=True,pady=8)
-    info.insert('end','手机 App 和 HITA 使用同一地址及口令。临时地址在通道重启后变化。\n关闭此程序会停止它启动的服务。无需保持终端窗口。')
-    def install_cloudflare():
-        from tools.openclaw_config import refreshed_path
-        winget=find_command('winget')
-        r=subprocess.run(command_args(winget,['install','--id','Cloudflare.cloudflared','--exact','--accept-package-agreements','--accept-source-agreements']),capture_output=True,creationflags=0x08000000 if os.name=='nt' else 0,env={**os.environ,'PATH':refreshed_path()},timeout=300)
-        if r.returncode and not find_command('cloudflared'):raise SetupError('连接组件安装未完成，请通过 winget 安装 Cloudflare.cloudflared。')
-        events.put(('state','连接组件已安装，请点击启动全部'))
+    button(row,'配置 / 更新免费中转',controller.setup_relay)
+    button(row,'启动服务',controller.start);button(row,'停止服务',controller.stop)
+    tunnel=tk.StringVar(value='首次先配置中转，再启动服务。之后打开本软件会自动启动。')
+    ttk.Label(connection,textvariable=tunnel,wraplength=730).pack(anchor='w',pady=(7,0))
+    phone=section('2 · 手机扫码（只需一次）')
+    ttk.Label(phone,text='手机打开“对话计划 → 设置 → 扫码连接电脑”，配对后自动保存。').pack(anchor='w')
+    ttk.Label(phone,text='再点手机里的“一键配置 HITA 连接”。电脑重启无需重新配对。').pack(anchor='w')
+    row=ttk.Frame(phone);row.pack(fill='x',pady=(8,0))
+    button(row,'显示手机配对二维码',controller.pairing)
+    button(row,'连接检查',controller.diagnose)
+    button(row,'写入手机测试备忘',controller.write_test)
+    harness=section('3 · 接入已有 DeepSeek Harness')
+    ttk.Label(harness,text='保留现有 dsh-im、微信、QQ 和模型；只追加计划工具。',wraplength=730).pack(anchor='w')
+    row=ttk.Frame(harness);row.pack(fill='x',pady=7)
+    button(row,'生成 Harness 接入配置',controller.export_harness)
+    def install_harness():
+        default=Path(os.getenv('DSH_HOME',str(Path.home()/'.dsh')))/'profiles/web/cordis.patch.yml'
+        path=filedialog.asksaveasfilename(title='选择现有 Harness profile 的 cordis.patch.yml（保留原内容）',
+            initialdir=str(default.parent),initialfile='cordis.patch.yml',defaultextension='.yml',confirmoverwrite=False)
+        if not path:return
+        def install():
+            controller.prepare()
+            from tools.harness_config import install_patch
+            install_patch(root,path)
+            events.put(('diagnosis','计划工具已加入所选 Harness profile。请重新启动原来的 Harness，再在微信或 QQ 测试记录。旧配置备份在 data 中。'))
+        async_action(install)
+    b=ttk.Button(row,text='加入 Harness 配置',command=install_harness);b.pack(side='left');buttons.append(b)
+    info=tk.Text(frame,height=6,wrap='word',font=('Microsoft YaHei UI',10),background='white',foreground='#243c3b',relief='flat',padx=12,pady=12);info.pack(fill='both',expand=True,pady=8)
+    info.insert('end','首次：配置中转 → 启动服务 → 手机扫码 → 加入 Harness 配置。\n日常：保持电脑联网、此软件和原 Harness 运行；断线会自动重连。\n保留整个 data 文件夹，升级无需重新扫码。')
+    def show_pair(data):
+        nonlocal pair_window
+        import qrcode
+        if pair_window is not None and pair_window.winfo_exists():pair_window.destroy()
+        pair_window=tk.Toplevel(window);dialog=pair_window;dialog.title('手机配对');dialog.resizable(False,False)
+        qr=qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M,border=4);qr.add_data(data['link']);qr.make(fit=True)
+        matrix=qr.get_matrix();scale=max(3,min(7,440//len(matrix)));size=len(matrix)*scale
+        canvas=tk.Canvas(dialog,width=size,height=size,bg='white',highlightthickness=0);canvas.pack(padx=16,pady=16)
+        for y,line in enumerate(matrix):
+            for x,dark in enumerate(line):
+                if dark:canvas.create_rectangle(x*scale,y*scale,(x+1)*scale,(y+1)*scale,fill='black',outline='')
+        label=ttk.Label(dialog,text='');label.pack(pady=6)
+        def copy_link():window.clipboard_clear();window.clipboard_append(data['link']);window.update()
+        copy=ttk.Button(dialog,text='复制配对链接（手机也可粘贴）',command=copy_link);copy.pack(pady=8)
+        def countdown():
+            if not dialog.winfo_exists():return
+            remaining=max(0,int(data['expires_at']-time.time()))
+            label.configure(text=f'仅首次配对需要扫描，{remaining} 秒内有效。' if remaining else '二维码已过期，请关闭后重新生成。')
+            if remaining:dialog.after(1000,countdown)
+            else:canvas.delete('all');copy.configure(state='disabled')
+        countdown()
     row=ttk.Frame(frame);row.pack(fill='x')
-    add_button(row,'安装连接组件',install_cloudflare)
-    ttk.Button(row,text='打开使用说明',command=lambda:__import__('webbrowser').open('https://github.com/linyubo0614/vibecoding_test_01/blob/main/docs/windows.md')).pack(side='left')
+    ttk.Button(row,text='使用说明',command=lambda:__import__('webbrowser').open('https://github.com/linyubo0614/vibecoding_test_01/blob/main/docs/windows.md')).pack(side='left')
+    if os.name=='nt' and getattr(sys,'frozen',False):
+        auto=tk.BooleanVar(value=False)
+        import winreg
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER,r'Software\Microsoft\Windows\CurrentVersion\Run') as key:
+            try:auto.set(bool(winreg.QueryValueEx(key,'ChatPlanner')[0]))
+            except FileNotFoundError:pass
+        def startup():
+            import subprocess
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER,r'Software\Microsoft\Windows\CurrentVersion\Run') as key:
+                if auto.get():winreg.SetValueEx(key,'ChatPlanner',0,winreg.REG_SZ,subprocess.list2cmdline([sys.executable,'--root',str(root)]))
+                else:
+                    try:winreg.DeleteValue(key,'ChatPlanner')
+                    except FileNotFoundError:pass
+        ttk.Checkbutton(row,text='Windows 登录后自动启动',variable=auto,command=startup).pack(side='left',padx=12)
     def tick():
         nonlocal busy
         try:
@@ -93,20 +138,19 @@ def gui(root,check_ui=False):
                 elif kind=='state':state.set(value)
                 elif kind=='address':address.set(value)
                 elif kind=='tunnel':tunnel.set(value)
-                elif kind=='wechat':wechat.set(value)
-                elif kind in ('error','diagnosis'):info.delete('1.0','end');info.insert('end',value)
+                elif kind=='pairing':show_pair(value)
+                elif kind in ('error','diagnosis','wechat'):info.delete('1.0','end');info.insert('end',value)
         except queue.Empty:pass
-        window.after(100,tick)
-    def check_quit():
         if getattr(controller,'closed',False):window.destroy();return
-        window.after(100,check_quit)
+        window.after(100,tick)
     def close():
-        if busy:messagebox.showinfo('操作进行中','请等待当前操作完成后再关闭。');return
-        if controller.running and not messagebox.askyesno('关闭对话计划','关闭后手机暂时无法接收新记录。确定停止并退出吗？'):return
+        if busy:messagebox.showinfo('操作进行中','请等待当前操作完成。');return
+        if controller.running and not messagebox.askyesno('停止并退出','退出后手机暂停连接，重新打开会自动恢复。确定退出吗？'):return
         def stop():controller.stop();controller.closed=True
         async_action(stop)
-    window.protocol('WM_DELETE_WINDOW',close);tick();check_quit()
+    window.protocol('WM_DELETE_WINDOW',close);tick()
     if check_ui:window.after(1000,window.destroy)
+    elif (root/'data/relay.json').exists():window.after(200,lambda:async_action(controller.start))
     window.mainloop()
 
 

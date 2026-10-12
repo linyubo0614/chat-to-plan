@@ -2,6 +2,10 @@
 
 本版本使用 Harness 官方 `@deepseek-ai/dsh-mcp-client` 的 stdio 接入。沿用已经运行的 dsh-im 和模型设置，不需要再次填写 DeepSeek Key，也不需要重新授权微信或 QQ。
 
+还没有安装 dsh-im 时，先使用 [README 中的安装提示词](../README.md#2-让-harness-自己安装-dsh-im)，让本机 Harness 按实际版本与 profile 安装，再本人完成微信／QQ接入。
+
+HITA 是可选扩展；本页的任务、备忘和重要日期验收均不要求安装 HITA。
+
 ## Windows 原生接入
 
 1. 完整解压 Windows 包，确保 `ChatPlanner.exe` 和 `ChatPlannerMcp.exe` 在同一个文件夹。保留原 `data`。
@@ -23,7 +27,7 @@ MCP 进程由 Harness 启动，直接读取本机 `data/api-token` 并调用本�
 
 ## 数据路径与反馈
 
-微信／QQ → 已有 dsh-im → 当前 Harness 模型整理 → MCP 计划工具 → 本机数据库 → 安卓 App／HITA。
+微信／QQ → 已有 dsh-im → 当前 Harness 模型整理 → MCP 计划工具 → 本机数据库 → 安卓对话计划 App；明确提交的课程／日程可另行交给 HITA。
 
 - `chat_planner_record` 提交结构化事项。后端再次验证字段，在同一事务中保存，不调用第二个模型。新记录必须有唯一 operation_id；网络失败重试沿用原编号及内容。
 - `chat_planner_status` 返回服务器时间、队列、连接情况；传 message_id 可查询实际交付状态。
@@ -34,7 +38,7 @@ MCP 进程由 Harness 启动，直接读取本机 `data/api-token` 并调用本�
 
 1. 微信：“帮我记下明天交高数作业，重要、不紧急”。App 日历查看明天的待办。
 2. QQ：“记在女朋友分类：她喜欢茉莉花茶”。App 分类备忘查看对应分类。
-3. 任一入口：“帮我加到 HITA：明天下午三点到四点上高数，二教301”。HITA 后台连接开启后核对“对话计划”课表，再查询交付状态。
+3. **可选：已安装并配置 HITA 时**，任一入口：“帮我加到 HITA：明天下午三点到四点上高数，二教301”。HITA 后台连接开启后核对“对话计划”课表，再查询交付状态。
 4. 电脑“连接检查”中的“最近 Harness 计划调用”应更新。能聊天不代表计划工具已经生效，以真实工具结果和数据库记录为准。
 
 如原 OpenClaw 仍接着同一微信入口，请由你选择保留哪一个消息处理程序，避免两边同时记录。本程序默认不再启动 OpenClaw。旧接入和工具仍可按 [OpenClaw 文档](openclaw.md) 使用。

@@ -114,6 +114,8 @@ jobs:
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb install -r "$RUNNER_TEMP/hita-planner/app/build/outputs/apk/debug/app-debug.apk"
             cd "$RUNNER_TEMP/hita-planner" && ./gradlew --no-daemon --max-workers=2 :app:connectedDebugAndroidTest
+            # Gradle removes its tested APK after instrumentation; restore HITA for the cross-app test.
+            adb install -r "$RUNNER_TEMP/hita-planner/app/build/outputs/apk/debug/app-debug.apk"
             cd "$GITHUB_WORKSPACE/android" && ./gradlew --no-daemon --max-workers=2 connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.requireHita=true
       - uses: actions/upload-artifact@v4
         if: always()

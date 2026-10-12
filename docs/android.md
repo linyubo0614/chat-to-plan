@@ -22,7 +22,7 @@ cd android
 ./gradlew --no-daemon connectedDebugAndroidTest
 ```
 
-仪器测试需要已经启动的设备／模拟器。测试使用模拟 API 响应，验证操作结果及追问流程，不发送真实 Key，也不消耗 DeepSeek 余额。没有安装 HITA 兼容版时，其跨 App 测试允许跳过；CI 的 HITA 专项任务会安装两款 APK，强制验证接口。
+仪器测试请使用空白模拟器；测试会清理测试 App 的对话和安装数据。测试使用模拟 API 响应，验证操作结果及追问流程，不发送真实 Key，也不消耗 DeepSeek 余额。没有安装 HITA 兼容版时，其跨 App 测试允许跳过；CI 的 HITA 专项任务会安装两款 APK，强制验证接口。
 
 ## 签名
 

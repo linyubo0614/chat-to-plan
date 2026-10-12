@@ -298,6 +298,22 @@ public final class ChatActivity extends Activity {
                               .putExtra(
                                   "page",
                                   record.optString("kind").equals("memo") ? "memos" : "tasks"))));
+          if (!record.isNull("reminder_minutes") && !record.optBoolean("completed")) {
+            SimpleTheme.gap(this, card, 6);
+            card.addView(
+                SimpleTheme.text(
+                    this,
+                    "提醒："
+                        + (record.optInt("reminder_minutes") == 0
+                            ? "准点"
+                            : "提前 " + record.optInt("reminder_minutes") + " 分钟"),
+                    12,
+                    SimpleTheme.MUTED,
+                    false));
+            if (!ReminderScheduler.notificationsAllowed(this)) {
+              card.addView(SimpleTheme.button(this, "允许日程提醒", this::allowNotifications));
+            }
+          }
         }
         block.addView(card);
       }
@@ -309,6 +325,31 @@ public final class ChatActivity extends Activity {
       return value.isEmpty() ? "" : new JSONObject(value).optString("stage");
     } catch (Exception e) {
       return "request";
+    }
+  }
+
+  private void allowNotifications() {
+    if (android.os.Build.VERSION.SDK_INT >= 33
+        && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED
+        && (store.getValue("notification_permission_requested").isEmpty()
+            || shouldShowRequestPermissionRationale(
+                android.Manifest.permission.POST_NOTIFICATIONS))) {
+      store.putValue("notification_permission_requested", "1");
+      requestPermissions(new String[] {android.Manifest.permission.POST_NOTIFICATIONS}, 71);
+    } else {
+      startActivity(
+          new Intent("android.settings.APP_NOTIFICATION_SETTINGS")
+              .putExtra("android.provider.extra.APP_PACKAGE", getPackageName()));
+    }
+  }
+
+  @Override
+  public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
+    super.onRequestPermissionsResult(request, permissions, results);
+    if (request == 71) {
+      ReminderScheduler.refresh(this);
+      renderMessages(true);
     }
   }
 

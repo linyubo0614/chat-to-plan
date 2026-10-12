@@ -30,7 +30,7 @@
 
 ## 下载与准备
 
-从 [GitHub Releases](https://github.com/linyubo0614/vibecoding_test_01/releases) 选择最新版；当前为 [0.7.0 预览版](https://github.com/linyubo0614/vibecoding_test_01/releases/tag/v0.7.0-preview)。
+从 [GitHub Releases](https://github.com/linyubo0614/vibecoding_test_01/releases) 选择最新版；当前为 [0.7.1 预览版](https://github.com/linyubo0614/chat-to-plan/releases/tag/v0.7.1-preview)（修复电脑端 Cloudflare 配置，安卓功能版本仍为 0.7.0）。
 
 | 文件 | 是否需要 |
 | --- | --- |

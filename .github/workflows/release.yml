@@ -2,26 +2,51 @@ name: release
 on:
   push:
     tags: ['v*-preview', 'hita-v*-planner.*']
+    branches: [main]
+    paths: ['.github/release.json']
+  workflow_dispatch:
 permissions:
   contents: read
   actions: read
 jobs:
   publish:
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'release:')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
       actions: read
     steps:
       - uses: actions/checkout@v5
-      - name: Find successful checks for this exact commit
+      - name: Select the release tag and verified source
+        id: plan
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import json, os, re
+          if os.environ['REF_TYPE'] == 'tag':
+              tag, source = os.environ['REF_NAME'], os.environ['GITHUB_SHA']
+          else:
+              plan = json.load(open('.github/release.json', encoding='utf-8'))
+              tag, source = plan['tag'], plan['source_sha']
+          if not re.fullmatch(r'(v\d+\.\d+\.\d+-preview|hita-v\d+\.\d+\.\d+-planner\.\d+)', tag):
+              raise SystemExit('Invalid preview release tag')
+          if not re.fullmatch(r'[a-f0-9]{40}', source):
+              raise SystemExit('Release source must be an exact commit SHA')
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+              out.write(f'tag={tag}\nsource_sha={source}\n')
+          PY
+      - name: Find successful checks for the exact source commit
         id: verified
         env:
           GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.plan.outputs.source_sha }}
         run: |
           CHECKS_RUN=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow checks.yml \
-            --commit "$GITHUB_SHA" --status success --json databaseId --jq '.[0].databaseId // empty')
+            --commit "$SOURCE_SHA" --status success --json databaseId --jq '.[0].databaseId // empty')
           if [ -z "$CHECKS_RUN" ]; then
-            echo 'No successful checks for this commit; publish the tag only after all checks pass.' >&2
+            echo 'No successful checks for the exact source commit; release stopped.' >&2
             exit 1
           fi
           echo "run_id=$CHECKS_RUN" >> "$GITHUB_OUTPUT"
@@ -43,28 +68,37 @@ jobs:
           path: windows-assets
           github-token: ${{ github.token }}
           run-id: ${{ steps.verified.outputs.run_id }}
-      - name: Prepare verified APK
+      - name: Prepare verified release files
         run: |
           mv release-assets/app-debug.apk release-assets/chat-planner-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify release-assets/chat-planner-debug.apk
-          cd release-assets
-          sha256sum chat-planner-debug.apk > SHA256SUMS
-      - name: Prepare Windows bundle and compatible APK
-        run: |
           cp windows-assets/chat-planner-windows.zip release-assets/chat-planner-windows.zip
           cp windows-assets/dist/ChatPlanner.exe release-assets/ChatPlanner.exe
           cp windows-assets/dist/ChatPlannerMcp.exe release-assets/ChatPlannerMcp.exe
           mv hita-assets/app-debug.apk release-assets/HITA_Planner_3.0.3-planner.3.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify release-assets/chat-planner-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify release-assets/HITA_Planner_3.0.3-planner.3.apk
           cd release-assets
           sha256sum *.apk *.zip *.exe > SHA256SUMS
-      - name: Publish preview release
+      - name: Publish preview release and installation files
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ steps.plan.outputs.tag }}
+          SOURCE_SHA: ${{ steps.plan.outputs.source_sha }}
         run: |
-          gh release create "$RELEASE_TAG" \
-            release-assets/*.apk release-assets/*.zip release-assets/*.exe release-assets/SHA256SUMS \
-            --verify-tag --prerelease \
-            --title "对话计划 $RELEASE_TAG 预览版" \
-            --notes-file docs/release-preview.md
+          if ! gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$SOURCE_SHA"; then
+            EXISTING_SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq '.sha')
+            if [ "$EXISTING_SHA" != "$SOURCE_SHA" ]; then
+              echo 'Existing tag points to a different commit; release stopped.' >&2
+              exit 1
+            fi
+          fi
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --prerelease \
+              --title "随手记事 $RELEASE_TAG 预览版" --notes-file docs/release-preview.md
+          else
+            gh release create "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" \
+              --verify-tag --prerelease --title "随手记事 $RELEASE_TAG 预览版" \
+              --notes-file docs/release-preview.md
+          fi

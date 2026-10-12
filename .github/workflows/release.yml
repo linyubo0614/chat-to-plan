@@ -50,6 +50,10 @@ jobs:
             exit 1
           fi
           echo "run_id=$CHECKS_RUN" >> "$GITHUB_OUTPUT"
+      - name: Check out the source whose APKs passed checks
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.plan.outputs.source_sha }}
       - uses: actions/download-artifact@v4
         with:
           name: chat-planner-debug-apk
@@ -62,23 +66,21 @@ jobs:
           path: hita-assets
           github-token: ${{ github.token }}
           run-id: ${{ steps.verified.outputs.run_id }}
-      - uses: actions/download-artifact@v4
-        with:
-          name: chat-planner-windows-package
-          path: windows-assets
-          github-token: ${{ github.token }}
-          run-id: ${{ steps.verified.outputs.run_id }}
-      - name: Prepare verified release files
+      - name: Prepare verified APKs with the same preview certificate
         run: |
+          set -euo pipefail
+          HITA_VERSION=$(python3 -c "import json; print(json.load(open('integrations/hita/upstream.json'))['compatibility_version'])")
           mv release-assets/app-debug.apk release-assets/chat-planner-debug.apk
-          cp windows-assets/chat-planner-windows.zip release-assets/chat-planner-windows.zip
-          cp windows-assets/dist/ChatPlanner.exe release-assets/ChatPlanner.exe
-          cp windows-assets/dist/ChatPlannerMcp.exe release-assets/ChatPlannerMcp.exe
-          mv hita-assets/app-debug.apk release-assets/HITA_Planner_3.0.3-planner.3.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify release-assets/chat-planner-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify release-assets/HITA_Planner_3.0.3-planner.3.apk
+          mv hita-assets/app-debug.apk "release-assets/HITA_Planner_${HITA_VERSION}.apk"
+          SIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          APP_CERT=$("$SIGNER" verify --print-certs release-assets/chat-planner-debug.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          HITA_CERT=$("$SIGNER" verify --print-certs "release-assets/HITA_Planner_${HITA_VERSION}.apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          if [ -z "$APP_CERT" ] || [ "$APP_CERT" != "$HITA_CERT" ]; then
+            echo 'APK preview certificates differ; local HITA permission would fail.' >&2
+            exit 1
+          fi
           cd release-assets
-          sha256sum *.apk *.zip *.exe > SHA256SUMS
+          sha256sum *.apk > SHA256SUMS
       - name: Publish preview release and installation files
         env:
           GH_TOKEN: ${{ github.token }}

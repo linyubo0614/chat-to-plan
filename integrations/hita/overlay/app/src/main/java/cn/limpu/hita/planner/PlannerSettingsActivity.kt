@@ -1,98 +1,52 @@
 package cn.limpu.hita.planner
 
 import android.app.Activity
-import android.app.AlertDialog
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
-import android.text.InputType
-import android.view.WindowManager
-import android.widget.*
-import cn.limpu.hita.R
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
-import java.util.concurrent.TimeUnit
+import android.widget.Button
+import android.widget.CheckBox
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import cn.limpu.hita.data.AppDatabase
 
-class PlannerSettingsActivity: Activity() {
+/** One-time, revocable consent for this phone; no URL, token, or network. */
+class PlannerSettingsActivity : Activity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
-        val scroll=ScrollView(this); val root=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(24,24,24,24) }; scroll.addView(root)
-        scroll.setOnApplyWindowInsetsListener { v,insets ->
-            v.setPadding(insets.systemWindowInsetLeft,insets.systemWindowInsetTop,insets.systemWindowInsetRight,insets.systemWindowInsetBottom); insets
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32, 32, 32, 32) }
+        val scroll = ScrollView(this).apply { addView(root) }
+        scroll.setOnApplyWindowInsetsListener { view, insets ->
+            view.setPadding(insets.systemWindowInsetLeft, insets.systemWindowInsetTop, insets.systemWindowInsetRight, insets.systemWindowInsetBottom); insets
         }
-        fun label(id: Int)=TextView(this).apply { setText(id); setTextSize(16f); root.addView(this) }
-        label(R.string.planner_title); label(R.string.planner_help)
-        val config=PlannerConfig(this)
-        val server=EditText(this).apply { setHint(R.string.planner_server); setText(config.server); setSingleLine(); root.addView(this) }
-        val token=EditText(this).apply { setHint(R.string.planner_token); inputType=InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD; root.addView(this) }
-        val enabled=Switch(this).apply { setText(R.string.planner_enabled); isChecked=config.enabled; root.addView(this) }
-        val result=label(R.string.planner_unconfirmed)
-        Button(this).apply {
-            setText(R.string.planner_save); root.addView(this)
-            setOnClickListener {
-                try {
-                    if (!enabled.isChecked) config.disable()
-                    else {
-                        val base=PlannerConfig.validateServer(server.text.toString())
-                        val secret=token.text.toString().trim().ifBlank { if(base==config.server) config.token else "" }
-                        config.save(base,secret,true)
-                    }
-                    token.setText(""); PlannerConfig.schedule(this@PlannerSettingsActivity)
-                    if(config.enabled) {
-                        if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
-                            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS),7421)
-                        PlannerForegroundService.start(this@PlannerSettingsActivity)
-                    } else PlannerForegroundService.stop(this@PlannerSettingsActivity)
-                    result.setText(R.string.planner_saved)
-                } catch(e: Exception) { result.setText(R.string.planner_invalid) }
-            }
+        TextView(this).apply { text = "随手记事本地授权"; textSize = 23f; root.addView(this) }
+        TextView(this).apply { text = "选择允许随手记事查询、添加、修改和删除日程的课表。授权只在本机生效，可随时撤销。"; textSize = 16f; setPadding(0, 20, 0, 20); root.addView(this) }
+        val access = PlannerAccess(this); val existing = access.tables()
+        val choices = linkedMapOf<String, CheckBox>()
+        choices[PlannerAccess.defaultTableId] = CheckBox(this).apply {
+            text = "随手记事独立课表"; isChecked = PlannerAccess.defaultTableId in existing || existing.isEmpty(); root.addView(this)
+        }
+        val result = TextView(this).apply { text = if (existing.isEmpty()) "尚未授权" else "已授权 ${existing.size} 个课表"; setPadding(0, 20, 0, 20) }
+        val save = Button(this).apply { text = "保存授权" }; val revoke = Button(this).apply { text = "撤销全部授权" }
+        root.addView(result); root.addView(save); root.addView(revoke)
+        save.setOnClickListener {
+            val selected = choices.filterValues { it.isChecked }.keys
+            if (selected.isEmpty()) result.text = "请选择至少一个课表，或使用撤销授权。"
+            else try { access.grant(selected); result.text = "已保存授权，返回随手记事即可使用。" }
+            catch (_: Exception) { result.text = "授权未能保存，请重试。" }
+        }
+        revoke.setOnClickListener {
+            try { access.revoke(); choices.values.forEach { it.isChecked = false }; result.text = "已撤销；随手记事无法再读取或修改 HITA 日程。" }
+            catch (_: Exception) { result.text = "撤销未完成，请重试。" }
         }
         setContentView(scroll)
-        val pairServer=intent.getStringExtra("planner_pair_server")
-        val pairCode=intent.getStringExtra("planner_pair_code")
-        intent.removeExtra("planner_pair_server");intent.removeExtra("planner_pair_code")
-        if(pairServer!=null && pairCode!=null && state==null) {
+        Thread {
             try {
-                val base=PlannerConfig.validateServer(pairServer)
-                require(pairCode.matches(Regex("[A-Za-z0-9_-]{43}")))
-                AlertDialog.Builder(this).setTitle("连接对话计划电脑")
-                    .setMessage("$base\n确认后保存连接并开启后台同步，以后无需填写地址和口令。")
-                    .setNegativeButton("取消",null).setPositiveButton("连接") { _,_ ->
-                        result.text="正在配对…"
-                        Thread {
-                            try {
-                                val client=OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(20,TimeUnit.SECONDS)
-                                    .followRedirects(false).followSslRedirects(false).build()
-                                val body=JSONObject().put("code",pairCode).put("label","HITA 手机连接").toString()
-                                val request=Request.Builder().url("$base/v1/pairings/claim")
-                                    .post(body.toRequestBody("application/json".toMediaType())).build()
-                                val secret=client.newCall(request).execute().use { response ->
-                                    check(response.isSuccessful)
-                                    val raw=response.body?.string() ?: error("Empty response")
-                                    check(raw.length<8192)
-                                    JSONObject(raw).getString("token")
-                                }
-                                config.save(base,secret,true)
-                                PlannerConfig.schedule(applicationContext)
-                                runOnUiThread {
-                                    if(!isDestroyed) {
-                                        server.setText(base);token.setText("");enabled.isChecked=true
-                                        if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
-                                            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS),7421)
-                                        PlannerForegroundService.start(this)
-                                        result.text="配对成功，已保存连接并开启后台同步。"
-                                    }
-                                }
-                            } catch(e: Exception) {
-                                runOnUiThread { if(!isDestroyed) result.text="配对未完成。请回到对话计划，重新点击“一键配置 HITA 连接”。" }
-                            }
-                        }.start()
-                    }.show()
-            } catch(e: Exception) {result.text="配对链接无效，请从对话计划重新配置。"}
-        }
+                val tables = AppDatabase.getDatabase(applicationContext).timetableDao().getTimetablesSync()
+                runOnUiThread { if (!isDestroyed) tables.filter { it.id != PlannerAccess.defaultTableId }.forEach { table ->
+                    val checkbox = CheckBox(this).apply { text = table.name ?: "未命名课表"; isChecked = table.id in existing }
+                    choices[table.id] = checkbox; root.addView(checkbox, root.indexOfChild(result))
+                } }
+            } catch (_: Exception) { runOnUiThread { if (!isDestroyed) result.text = "未能读取现有课表，可先授权独立课表。" } }
+        }.start()
     }
 }

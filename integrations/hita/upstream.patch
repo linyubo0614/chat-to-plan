@@ -1,5 +1,5 @@
 diff --git a/app/build.gradle b/app/build.gradle
-index ca3e65f..a1c180e 100644
+index ca3e65f..7bedd55 100644
 --- a/app/build.gradle
 +++ b/app/build.gradle
 @@ -11,8 +11,8 @@ plugins {
@@ -8,12 +8,12 @@ index ca3e65f..a1c180e 100644
      ? Integer.parseInt(envVersionCode)
 -    : 2026093005
 -def appVersionNameValue = "3.0.3"
-+    : 2026101102
-+def appVersionNameValue = "3.0.3-planner.3"
++    : 2026101304
++def appVersionNameValue = "3.0.3-planner.4"
  
  def keystorePropertiesFile = rootProject.file("keystore.properties")
  def keystoreProperties = new Properties()
-@@ -43,8 +43,8 @@ def buildConfigString = { String value ->
+@@ -43,11 +43,17 @@ def buildConfigString = { String value ->
      "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
  }
  
@@ -24,7 +24,16 @@ index ca3e65f..a1c180e 100644
  
  android {
      signingConfigs {
-@@ -59,7 +59,7 @@ android {
++        plannerPreview {
++            storeFile file(System.getenv("PLANNER_PREVIEW_KEYSTORE") ?: "../preview.keystore")
++            storePassword "android"
++            keyAlias "androiddebugkey"
++            keyPassword "android"
++        }
+         release {
+             if (keystorePropertiesFile.exists() && keystoreProperties['storeFile']) {
+                 storeFile file(keystoreProperties['storeFile'])
+@@ -59,7 +65,7 @@ android {
      }
  
      defaultConfig {
@@ -33,40 +42,48 @@ index ca3e65f..a1c180e 100644
          minSdkVersion 26
          targetSdk 35
          compileSdk 36
-@@ -79,7 +79,7 @@ android {
+@@ -79,7 +85,7 @@ android {
          // 统一入口：nginx 按路径分发（/api/usage|notices|visit|stats → hita-api；/api/courses|rag|... → agent-backend；/v1/* → course-server）
          buildConfigField "String", "AGENT_BACKEND_BASE_URL", '"https://api.hita.limpu.cn"'
          buildConfigField "String", "HOA_API_KEY", '""'
 -        buildConfigField "String", "UPDATE_URL", '"https://github.com/HIT-A/HITA_Android/releases/latest"'
-+        buildConfigField "String", "UPDATE_URL", '"https://github.com/linyubo0614/vibecoding_test_01/releases"'
++        buildConfigField "String", "UPDATE_URL", '"https://github.com/linyubo0614/chat-to-plan/releases"'
          buildConfigField "String", "UPDATE_VERSION_NAME", "\"${appVersionNameValue}\""
          buildConfigField "long", "UPDATE_VERSION_CODE", "${appVersionCodeValue}L"
          buildConfigField "String", "UPDATE_LOG", '""'
-@@ -96,7 +96,7 @@ android {
+@@ -96,10 +102,8 @@ android {
      buildTypes {
          debug {
              // 诊断版使用独立 applicationId，与正式版共存不冲突
 -            applicationIdSuffix ".diag"
+-            if (keystorePropertiesFile.exists() && keystoreProperties['storeFile']) {
+-                signingConfig signingConfigs.release
+-            }
 +            // Compatibility debug and release share the dedicated package.
-             if (keystorePropertiesFile.exists() && keystoreProperties['storeFile']) {
-                 signingConfig signingConfigs.release
-             }
++            signingConfig signingConfigs.plannerPreview
+         }
+         release {
+             signingConfig signingConfigs.release
 diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
-index 8b06c1d..73ab5e6 100644
+index 8b06c1d..805cc0f 100644
 --- a/app/src/main/AndroidManifest.xml
 +++ b/app/src/main/AndroidManifest.xml
-@@ -115,6 +115,21 @@
+@@ -17,6 +17,9 @@
+     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+ 
++    <queries><package android:name="cn.chatplanner.control" /></queries>
++    <permission android:name="cn.chatplanner.hita.permission.LOCAL_PLANNER" android:protectionLevel="signature" />
++
+     <application
+         android:name=".HApplication"
+         android:allowBackup="true"
+@@ -115,6 +118,15 @@
              </intent-filter>
          </receiver>
  
-+        <service android:name=".planner.PlannerForegroundService" android:exported="false"
-+            android:foregroundServiceType="specialUse">
-+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-+                android:value="User-enabled persistent connection to deliver and verify private calendar entries in seconds without opening an activity." />
-+        </service>
-+        <receiver android:name=".planner.PlannerBootReceiver" android:exported="false">
-+            <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
-+        </receiver>
++        <service android:name=".planner.PlannerLocalService" android:exported="true"
++            android:permission="cn.chatplanner.hita.permission.LOCAL_PLANNER" />
 +        <activity android:name=".planner.PlannerSettingsActivity" android:exported="true"
 +            android:label="@string/planner_title">
 +            <intent-filter>
@@ -78,20 +95,22 @@ index 8b06c1d..73ab5e6 100644
              android:name=".ui.main.MainActivity"
              android:exported="true"
 diff --git a/app/src/main/java/cn/limpu/hita/HApplication.kt b/app/src/main/java/cn/limpu/hita/HApplication.kt
-index 84c7af9..577970f 100644
+index 84c7af9..2318c80 100644
 --- a/app/src/main/java/cn/limpu/hita/HApplication.kt
 +++ b/app/src/main/java/cn/limpu/hita/HApplication.kt
-@@ -43,6 +43,8 @@ class HApplication : Application() {
+@@ -43,6 +43,10 @@ class HApplication : Application() {
  
      override fun onCreate() {
          super.onCreate()
-+        // Schedule silent delivery; no Activity is opened by the worker.
-+        cn.limpu.hita.planner.PlannerConfig.schedule(this)
++        // Retire the former remote bridge when upgrading; local consent is granted separately.
++        getSharedPreferences("planner", MODE_PRIVATE).edit().clear().apply()
++        androidx.work.WorkManager.getInstance(this).cancelUniqueWork("chat-planner-periodic")
++        androidx.work.WorkManager.getInstance(this).cancelUniqueWork("chat-planner-once")
  
          // 启用 Material You 动态配色（Android 12+ 自动跟随系统壁纸颜色）
          DynamicColors.applyToActivitiesIfAvailable(this)
 diff --git a/app/src/main/java/cn/limpu/hita/data/repository/UpdateRepository.kt b/app/src/main/java/cn/limpu/hita/data/repository/UpdateRepository.kt
-index 0c76d2d..4d8c2a3 100644
+index 0c76d2d..8b67947 100644
 --- a/app/src/main/java/cn/limpu/hita/data/repository/UpdateRepository.kt
 +++ b/app/src/main/java/cn/limpu/hita/data/repository/UpdateRepository.kt
 @@ -29,7 +29,7 @@ class UpdateRepository @Inject constructor(
@@ -159,7 +178,7 @@ index 0c76d2d..4d8c2a3 100644
      }
  
 +    private fun isPlannerRepo(repo: RepoInfo): Boolean =
-+        repo.owner == "linyubo0614" && repo.repo == "vibecoding_test_01"
++        repo.owner == "linyubo0614" && repo.repo == "chat-to-plan"
 +
 +    private fun isPlannerApk(name: String?): Boolean =
 +        name?.startsWith("HITA_Planner_") == true && name.endsWith(".apk", ignoreCase = true)
@@ -201,32 +220,37 @@ index 2c2cbec..cc83148 100644
      <string name="wallpaper_remove">移除壁纸</string>
      <string name="wallpaper_change">更换壁纸</string>
 diff --git a/app/src/main/res/xml/analytics_backup_rules.xml b/app/src/main/res/xml/analytics_backup_rules.xml
-index d7f0530..d4e9692 100644
+index d7f0530..eaf932d 100644
 --- a/app/src/main/res/xml/analytics_backup_rules.xml
 +++ b/app/src/main/res/xml/analytics_backup_rules.xml
-@@ -1,5 +1,6 @@
+@@ -1,5 +1,7 @@
  <?xml version="1.0" encoding="utf-8"?>
  <full-backup-content>
++        <exclude domain="sharedpref" path="planner_local.xml" />
 +        <exclude domain="sharedpref" path="planner.xml" />
          <exclude domain="sharedpref" path="usage_analytics.xml" />
          <exclude domain="sharedpref" path="usage_analytics_settings.xml" />
          <exclude domain="sharedpref" path="usage_analytics_session.xml" />
 diff --git a/app/src/main/res/xml/analytics_data_extraction_rules.xml b/app/src/main/res/xml/analytics_data_extraction_rules.xml
-index 8e01beb..6f265bc 100644
+index 8e01beb..943d1ab 100644
 --- a/app/src/main/res/xml/analytics_data_extraction_rules.xml
 +++ b/app/src/main/res/xml/analytics_data_extraction_rules.xml
-@@ -1,6 +1,7 @@
+@@ -1,6 +1,9 @@
  <?xml version="1.0" encoding="utf-8"?>
  <data-extraction-rules>
      <cloud-backup>
++        <exclude domain="sharedpref" path="planner_local.xml" />
++        <exclude domain="sharedpref" path="planner.xml" />
 +        <exclude domain="sharedpref" path="planner.xml" />
          <exclude domain="sharedpref" path="usage_analytics.xml" />
          <exclude domain="sharedpref" path="usage_analytics_settings.xml" />
          <exclude domain="sharedpref" path="usage_analytics_session.xml" />
-@@ -11,6 +12,7 @@
+@@ -11,6 +14,9 @@
          <exclude domain="database" path="usage_analytics_v2.db-journal" />
      </cloud-backup>
      <device-transfer>
++        <exclude domain="sharedpref" path="planner_local.xml" />
++        <exclude domain="sharedpref" path="planner.xml" />
 +        <exclude domain="sharedpref" path="planner.xml" />
          <exclude domain="sharedpref" path="usage_analytics.xml" />
          <exclude domain="sharedpref" path="usage_analytics_settings.xml" />

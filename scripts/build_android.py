@@ -4,6 +4,7 @@ import os
 import subprocess
 from pathlib import Path
 from urllib.parse import urlsplit
+from prepare_signing import ensure_preview_key
 
 
 def main():
@@ -20,6 +21,8 @@ def main():
         task_env["JAVA_HOME"] = str(Path(args.jdk).resolve())
     cache = root / ".build-cache"
     cache.mkdir(exist_ok=True)
+    key_path = task_env.get("PLANNER_PREVIEW_KEYSTORE", str(cache / "preview.keystore"))
+    task_env["PLANNER_PREVIEW_KEYSTORE"] = str(ensure_preview_key(key_path, args.jdk or None))
     task_env.setdefault("ANDROID_USER_HOME",str(cache / "android"))
     task_env.setdefault("GRADLE_USER_HOME",str(cache / "gradle"))
     proxy = urlsplit(os.getenv("HTTPS_PROXY",""))

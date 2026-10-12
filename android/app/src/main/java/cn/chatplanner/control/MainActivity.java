@@ -3,222 +3,354 @@ package cn.chatplanner.control;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
-import android.graphics.Color;
-import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
-import android.view.View;
-import android.view.WindowManager;
-import android.widget.ArrayAdapter;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.ScrollView;
-import android.widget.Spinner;
-import android.widget.Switch;
-import android.widget.TextView;
-import java.util.UUID;
+import android.widget.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import org.json.JSONArray;
 import org.json.JSONObject;
 
-public class MainActivity extends Activity {
-    private final ExecutorService io = Executors.newSingleThreadExecutor();
-    private final Handler ui = new Handler(Looper.getMainLooper());
-    private CredentialStore credentials;
-    private EditText server, token, key;
-    private Switch enabled;
-    private Spinner model;
-    private TextView status, keyStatus;
-    private Button connect, save, clear, test, inbox;
-    private String connectedBase = "", connectedToken = "";
-    private boolean busy = false;
-    private volatile boolean destroyed = false;
-    private final int ink = SimpleTheme.INK, teal = SimpleTheme.GREEN;
+/** One-time model settings, optional HITA access and user-controlled backups. */
+public final class MainActivity extends Activity {
+  private final ExecutorService worker = Executors.newSingleThreadExecutor();
+  private final Handler main = new Handler(Looper.getMainLooper());
+  private AppSettings settings;
+  private EditText key, model;
+  private TextView status, keyStatus;
+  private Button save, test;
+  private File exportFile;
 
-    @Override public void onCreate(Bundle state) {
-        super.onCreate(state);SimpleTheme.window(this);
-        credentials = new CredentialStore(this);
-        ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(SimpleTheme.PAPER);
-        LinearLayout root = column(); root.setPadding(dp(24), dp(28), dp(24), dp(32)); scroll.addView(root);
-        // Respect system bars on devices enforcing edge-to-edge for target SDK 35.
-        scroll.setOnApplyWindowInsetsListener((v, insets) -> {
-            v.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
-            return insets;
-        });
-        TextView heading = label(R.string.app_name, 26); heading.setTypeface(null, Typeface.BOLD); root.addView(heading);
-        root.addView(label(R.string.subtitle, 15));
-        status = label(R.string.disconnected, 14); status.setTextColor(teal); root.addView(status);
+  @Override
+  public void onCreate(Bundle saved) {
+    super.onCreate(saved);
+    SimpleTheme.window(this);
+    settings = new AppSettings(this);
+    LinearLayout root = SimpleTheme.column(this);
+    root.setBackgroundColor(SimpleTheme.PAPER);
+    setContentView(root);
+    SimpleTheme.insets(this, root, 16);
+    LinearLayout heading = SimpleTheme.row(this);
+    heading.addView(SimpleTheme.button(this, "‹", this::finish));
+    SimpleTheme.weight(heading, SimpleTheme.text(this, "设置", 22, SimpleTheme.INK, true));
+    root.addView(heading);
+    SimpleTheme.gap(this, root, 14);
+    ScrollView scroll = new ScrollView(this);
+    LinearLayout body = SimpleTheme.column(this);
+    scroll.addView(body);
+    root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+    LinearLayout ai = card(body, "DeepSeek");
+    ai.addView(SimpleTheme.text(this, "填写一次，之后直接在首页对话。", 14, SimpleTheme.MUTED, false));
+    SimpleTheme.gap(this, ai, 10);
+    keyStatus = SimpleTheme.text(this, "", 12, SimpleTheme.BLUE, false);
+    ai.addView(keyStatus);
+    refreshKeyState();
+    key = new EditText(this);
+    key.setHint("API Key（已保存时留空即可）");
+    key.setTextSize(14);
+    key.setSingleLine(true);
+    key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+    key.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);
+    ai.addView(key);
+    model = new EditText(this);
+    model.setSingleLine(true);
+    model.setTextSize(14);
+    model.setHint("模型名称");
+    model.setText(settings.model());
+    ai.addView(model);
+    SimpleTheme.gap(this, ai, 10);
+    LinearLayout buttons = SimpleTheme.row(this);
+    save = SimpleTheme.button(this, "保存设置", this::save);
+    SimpleTheme.weight(buttons, save);
+    test = SimpleTheme.button(this, "检查连接", this::checkConnection);
+    SimpleTheme.weight(buttons, test);
+    ai.addView(buttons);
+    SimpleTheme.gap(this, ai, 8);
+    ai.addView(
+        SimpleTheme.button(
+            this, "获取 API Key", () -> open("https://platform.deepseek.com/api_keys")));
+    ai.addView(
+        SimpleTheme.text(
+            this, "AI 对话需要联网并按官方 API 用量计费。记录保存在手机，手动管理无需联网。", 12, SimpleTheme.MUTED, false));
+    SimpleTheme.gap(this, ai, 8);
+    ai.addView(
+        SimpleTheme.button(
+            this,
+            "移除已保存的 Key",
+            () ->
+                new AlertDialog.Builder(this)
+                    .setTitle("移除 API Key？")
+                    .setMessage("记录会保留，可继续手动管理。")
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton(
+                        "移除",
+                        (d, w) -> {
+                          settings.setApiKey("");
+                          refreshKeyState();
+                        })
+                    .show()));
+    LinearLayout hita = card(body, "HITA · 可选扩展");
+    hita.addView(
+        SimpleTheme.text(
+            this, "在这台手机安装兼容版，并授权需要编辑的课表，即可通过对话管理 HITA 日程。", 14, SimpleTheme.MUTED, false));
+    SimpleTheme.gap(this, hita, 12);
+    hita.addView(
+        SimpleTheme.button(
+            this,
+            "授权 / 管理 HITA 访问",
+            () -> {
+              try {
+                startActivity(new HitaClient(this).authorizationIntent());
+              } catch (Exception ex) {
+                new AlertDialog.Builder(this)
+                    .setTitle("安装 HITA 兼容版")
+                    .setMessage("原版 HITA 没有本项目的日程接口。需要此扩展时，请从项目 Releases 下载兼容版；不安装也可完整使用本地功能。")
+                    .setNegativeButton("稍后", null)
+                    .setPositiveButton(
+                        "前往下载",
+                        (d, w) -> open("https://github.com/linyubo0614/chat-to-plan/releases"))
+                    .show();
+              }
+            }));
+    LinearLayout data = card(body, "数据与提醒");
+    data.addView(
+        SimpleTheme.text(
+            this, "备份包含任务与备忘，不包含 API Key。导入会补充缺失记录，保留手机上已有的编辑。", 14, SimpleTheme.MUTED, false));
+    SimpleTheme.gap(this, data, 12);
+    data.addView(SimpleTheme.button(this, "导出记录备份", this::export));
+    SimpleTheme.gap(this, data, 6);
+    data.addView(
+        SimpleTheme.button(
+            this,
+            "导入备份 / 旧电脑版数据库",
+            () -> {
+              Intent i =
+                  new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                      .setType("*/*")
+                      .addCategory(Intent.CATEGORY_OPENABLE);
+              startActivityForResult(i, 102);
+            }));
+    SimpleTheme.gap(this, data, 6);
+    data.addView(
+        SimpleTheme.button(
+            this,
+            "允许日程提醒",
+            () -> {
+              if (android.os.Build.VERSION.SDK_INT >= 33
+                  && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                      != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                requestPermissions(
+                    new String[] {android.Manifest.permission.POST_NOTIFICATIONS}, 71);
+              else {
+                startActivity(
+                    new Intent("android.settings.APP_NOTIFICATION_SETTINGS")
+                        .putExtra("android.provider.extra.APP_PACKAGE", getPackageName()));
+              }
+            }));
+    data.addView(
+        SimpleTheme.text(
+            this, "提醒由手机执行。全天事项按 09:00 计算；系统省电可能使通知延迟。", 12, SimpleTheme.MUTED, false));
+    LinearLayout about = card(body, "随手记事");
+    about.addView(SimpleTheme.text(this, "0.8.0 · 聊天入口，本地计划", 14, SimpleTheme.MUTED, false));
+    SimpleTheme.gap(this, about, 8);
+    about.addView(
+        SimpleTheme.button(
+            this, "使用说明 / 项目仓库", () -> open("https://github.com/linyubo0614/chat-to-plan")));
+    status = SimpleTheme.text(this, "", 13, SimpleTheme.MUTED, false);
+    body.addView(status);
+    SimpleTheme.gap(this, body, 16);
+  }
 
-        LinearLayout connection = card(root, R.string.connection);
-        Button pair = new Button(this); pair.setText("扫码连接电脑（只需一次）"); connection.addView(pair);
-        pair.setOnClickListener(v -> startActivity(new Intent(this, PairingActivity.class)));
-        server = input(connection, R.string.server_hint, false); server.setText(credentials.server());
-        token = input(connection, R.string.token_hint, true);
-        connect = button(connection, R.string.connect); connect.setOnClickListener(v -> connect());
+  private LinearLayout card(LinearLayout body, String title) {
+    LinearLayout c = SimpleTheme.card(this);
+    c.addView(SimpleTheme.text(this, title, 18, SimpleTheme.INK, true));
+    SimpleTheme.gap(this, c, 10);
+    body.addView(c);
+    SimpleTheme.gap(this, body, 14);
+    return c;
+  }
 
-        LinearLayout control = card(root, R.string.processing);
-        enabled = new Switch(this); enabled.setText(R.string.switch_label); enabled.setTextSize(17); enabled.setTextColor(ink); enabled.setChecked(true); control.addView(enabled);
-        control.addView(label(R.string.switch_help, 13));
-        key = input(control, R.string.key_hint, true);
-        keyStatus = label(R.string.key_missing, 13); control.addView(keyStatus);
-        control.addView(label(R.string.model_label, 13));
-        model = new Spinner(this); model.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new String[]{"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"})); control.addView(model);
-        save = button(control, R.string.save); save.setOnClickListener(v -> save(false));
-        clear = button(control, R.string.clear_key);
-        clear.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle(R.string.clear_title).setMessage(R.string.clear_message)
-            .setNegativeButton(R.string.cancel, null).setPositiveButton(R.string.confirm, (d, w) -> save(true)).show());
-
-        LinearLayout integrations = card(root, R.string.integrations);
-        integrations.addView(label(R.string.integration_default, 14));
-        test = button(integrations, R.string.test_message); test.setOnClickListener(v -> testMessage());
-        inbox = button(integrations, R.string.open_inbox);
-        inbox.setOnClickListener(v -> startActivity(new Intent(this, InboxActivity.class)));
-        Button hita=button(integrations,R.string.open_hita_connection);
-        hita.setOnClickListener(v->{
-            try { startActivity(new Intent().setComponent(new android.content.ComponentName("cn.chatplanner.hita","cn.limpu.hita.planner.PlannerSettingsActivity"))); }
-            catch(android.content.ActivityNotFoundException ex) { new AlertDialog.Builder(this).setTitle("需要 HITA 兼容版").setMessage("当前未找到兼容版连接入口。请安装发布页中的 HITA_Planner 安装包；原版 HITA 不含此入口。").setPositiveButton("知道了",null).show(); }
-        });
-        Button configureHita=new Button(this);configureHita.setText("一键配置 HITA 连接");integrations.addView(configureHita);
-        configureHita.setOnClickListener(v->configureHita());
-        Button shortcut=button(integrations,R.string.add_home_icon);shortcut.setOnClickListener(v->HomeShortcut.request(this));
-        root.addView(label(R.string.security, 12));
-        SimpleTheme.buttons(this,root);setContentView(scroll); setBusy(false);
-        if (!credentials.server().isEmpty()) connect();
+  private void refreshKeyState() {
+    try {
+      keyStatus.setText(settings.apiKey().isEmpty() ? "尚未配置 API Key" : "API Key 已保存在手机");
+    } catch (Exception ex) {
+      keyStatus.setText("原 Key 无法读取，请重新填写。");
     }
+  }
 
-    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
-    private LinearLayout column() { LinearLayout view = new LinearLayout(this); view.setOrientation(LinearLayout.VERTICAL); return view; }
-    private TextView label(int text, int size) { TextView v = new TextView(this); v.setText(text); v.setTextSize(size); v.setTextColor(ink); v.setPadding(0, dp(5), 0, dp(9)); return v; }
-    private LinearLayout card(LinearLayout root, int title) {
-        LinearLayout view = column(); view.setPadding(dp(18), dp(14), dp(18), dp(14));
-        GradientDrawable background = new GradientDrawable(); background.setColor(Color.WHITE); background.setCornerRadius(dp(18)); view.setBackground(background);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2); params.setMargins(0, dp(18), 0, 0); root.addView(view, params);
-        TextView heading = label(title, 18); heading.setTypeface(null, Typeface.BOLD); view.addView(heading); return view;
+  private boolean save() {
+    try {
+      String value = key.getText().toString().trim();
+      if (!value.isEmpty()) settings.setApiKey(value);
+      settings.setModel(model.getText().toString().trim());
+      key.setText("");
+      refreshKeyState();
+      status.setText("设置已保存");
+      return true;
+    } catch (Exception ex) {
+      status.setText(ex.getMessage());
+      return false;
     }
-    private EditText input(LinearLayout parent, int hint, boolean secret) {
-        EditText view = new EditText(this); view.setHint(hint); view.setTextSize(14); view.setSingleLine(true);
-        view.setInputType(secret ? InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD : InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        view.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO); parent.addView(view, new LinearLayout.LayoutParams(-1, dp(58))); return view;
-    }
-    private Button button(LinearLayout parent, int text) { Button b = new Button(this); b.setText(text); b.setTextColor(teal); b.setAllCaps(false); parent.addView(b, new LinearLayout.LayoutParams(-1, dp(54))); return b; }
-    private void post(Runnable runnable) { ui.post(() -> { if (!destroyed) runnable.run(); }); }
-    private void setBusy(boolean value) {
-        busy = value; boolean connected = !connectedBase.isEmpty();
-        connect.setEnabled(!busy); save.setEnabled(!busy && connected); clear.setEnabled(!busy && connected);
-        test.setEnabled(!busy && connected); server.setEnabled(!busy); token.setEnabled(!busy);
-        inbox.setEnabled(!busy && connected);
-        key.setEnabled(!busy && connected); enabled.setEnabled(!busy && connected); model.setEnabled(!busy && connected);
-    }
-    private void failed() { post(() -> { status.setText(R.string.failed); setBusy(false); }); }
+  }
 
-    private void configureHita() {
-        if (busy || connectedBase.isEmpty()) { status.setText("请先扫码或连接电脑，再配置 HITA。"); return; }
-        final String base=connectedBase, secret=connectedToken;
-        setBusy(true);status.setText("正在为 HITA 生成配对…");
-        io.execute(()->{
-            try {
-                JSONObject ticket=ApiClient.request(base,secret,"POST","/v1/pairings",new JSONObject().put("label","HITA"));
-                String code=ticket.getString("code");
-                post(()->{
-                    setBusy(false);
-                    try {startActivity(new Intent().setComponent(new android.content.ComponentName("cn.chatplanner.hita","cn.limpu.hita.planner.PlannerSettingsActivity"))
-                        .putExtra("planner_pair_server",base).putExtra("planner_pair_code",code));status.setText("请在 HITA 确认连接。");}
-                    catch(Exception e){status.setText("请先安装新版 HITA 兼容版，再点击一键配置。");}
-                });
-            } catch(Exception e){failed();}
-        });
-    }
-
-    private void connect() {
-        final String base;
-        try { base = ApiClient.validateBase(server.getText().toString()); }
-        catch (Exception ex) { status.setText(R.string.invalid_url); return; }
-        final String typedToken = token.getText().toString().trim();
-        connectedBase = ""; connectedToken = ""; setBusy(true); status.setText(R.string.connecting);
-        io.execute(() -> {
-            try {
-                // A saved bearer token must never be sent to a newly entered server.
-                String secret = typedToken.isEmpty() && base.equals(credentials.server()) ? credentials.token() : typedToken;
-                if (secret.length() < 24) { post(() -> { status.setText(R.string.missing_token); setBusy(false); }); return; }
-                JSONObject settings = ApiClient.request(base, secret, "GET", "/v1/settings", null);
-                JSONObject queues = ApiClient.request(base, secret, "GET", "/v1/status", null);
-                credentials.save(base, secret);
-                post(() -> { connectedBase = base; connectedToken = secret; token.setText(""); apply(settings, queues); setBusy(false); });
-            } catch (Exception ex) { failed(); }
-        });
-    }
-
-    private void apply(JSONObject settings, JSONObject state) {
-        enabled.setChecked(settings.optBoolean("enabled", true));
-        String configured=settings.optString("model");
-        for(int i=0;i<model.getCount();i++) if(configured.equals(model.getItemAtPosition(i))) { model.setSelection(i); break; }
-        keyStatus.setText(settings.optBoolean("deepseek_key_configured") ? R.string.key_present : R.string.key_missing);
-        int pending = 0;
-        JSONObject queues = state.optJSONObject("queues"); JSONObject messages = queues == null ? null : queues.optJSONObject("messages");
-        if (messages != null) pending = messages.optInt("pending") + messages.optInt("retry");
-        status.setText(getString(R.string.connected_status, getString(enabled.isChecked() ? R.string.enabled : R.string.paused), pending));
-    }
-
-    private void save(boolean removeKey) {
-        if (busy || connectedBase.isEmpty()) return;
-        final String base = connectedBase, secret = connectedToken, providerKey = key.getText().toString().trim();
-        final boolean active = enabled.isChecked(); final String selected = model.getSelectedItem().toString();
-        setBusy(true); status.setText(R.string.saving);
-        io.execute(() -> {
-            try {
-                JSONObject body = new JSONObject().put("enabled", active).put("model", selected);
-                if (removeKey || !providerKey.isEmpty()) body.put("deepseek_api_key", removeKey ? "" : providerKey);
-                JSONObject settings = ApiClient.request(base, secret, "PUT", "/v1/settings", body);
-                post(() -> { key.setText(""); enabled.setChecked(settings.optBoolean("enabled")); keyStatus.setText(settings.optBoolean("deepseek_key_configured") ? R.string.key_present : R.string.key_missing); status.setText(R.string.saved); setBusy(false); });
-            } catch (Exception ex) { failed(); }
-        });
-    }
-
-    private void testMessage() {
-        EditText text = new EditText(this); text.setHint(R.string.test_help); text.setMinLines(3); text.setMaxLines(8);
-        new AlertDialog.Builder(this).setTitle(R.string.test_title).setView(text).setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.send, (d, w) -> {
-                final String message = text.getText().toString().trim(); if (message.isEmpty()) return;
-                final String base = connectedBase, secret = connectedToken;
-                setBusy(true);
-                io.execute(() -> {
-                    try {
-                        JSONObject body = new JSONObject().put("message_id", UUID.randomUUID().toString()).put("text", message);
-                        JSONObject result = ApiClient.request(base, secret, "POST", "/v1/messages", body);
-                        String id = result.getString("id"); post(() -> status.setText(R.string.received));
-                        poll(base, secret, id, 0);
-                    } catch (Exception ex) { failed(); }
-                });
-            }).show();
-    }
-
-    private void poll(String base, String secret, String id, int attempt) {
-        if (destroyed) return;
-        try {
-            JSONObject result = ApiClient.request(base, secret, "GET", "/v1/messages/" + id, null);
-            if ("failed".equals(result.optString("status"))) { post(() -> { status.setText(R.string.analysis_failed); setBusy(false); }); return; }
-            if ("parsed".equals(result.optString("status"))) {
-                JSONArray tasks = result.optJSONArray("tasks"); StringBuilder summary = new StringBuilder();
-                if (tasks != null) for (int i = 0; i < tasks.length(); i++) {
-                    JSONObject task = tasks.getJSONObject(i); JSONObject item = task.getJSONObject("payload");
-                    summary.append(item.optString("title")).append(" → ").append(getString("hita".equals(task.optString("target")) ? R.string.hita : R.string.planner))
-                        .append("\n").append(task.optString("reason")).append("\n\n");
+  private void checkConnection() {
+    if (!save()) return;
+    save.setEnabled(false);
+    test.setEnabled(false);
+    status.setText("正在检查 DeepSeek 连接…");
+    worker.execute(
+        () -> {
+          String message;
+          try {
+            new DeepSeekClient(settings).checkConnection();
+            message = "DeepSeek 连接正常，可以回到首页对话。";
+          } catch (Exception ex) {
+            message = ex.getMessage() == null ? "连接失败，请检查网络后重试。" : ex.getMessage();
+          }
+          final String result = message;
+          main.post(
+              () -> {
+                if (!isFinishing()) {
+                  status.setText(result);
+                  save.setEnabled(true);
+                  test.setEnabled(true);
                 }
-                if (!result.isNull("question")) summary.append(result.optString("question"));
-                String display = summary.toString(); post(() -> { status.setText(R.string.analysis_result); setBusy(false); new AlertDialog.Builder(this).setTitle(R.string.analysis_result).setMessage(display).setPositiveButton(android.R.string.ok, null).show(); });
-                return;
-            }
-            if (attempt >= 30) { post(() -> { status.setText(R.string.still_pending); setBusy(false); }); return; }
-            ui.postDelayed(() -> { if (!destroyed) io.execute(() -> poll(base, secret, id, attempt + 1)); }, 2000);
-        } catch (Exception ex) { failed(); }
-    }
+              });
+        });
+  }
 
-    @Override protected void onDestroy() {
-        destroyed = true; ui.removeCallbacksAndMessages(null); io.shutdownNow(); super.onDestroy();
+  private void export() {
+    status.setText("正在准备备份…");
+    worker.execute(
+        () -> {
+          try {
+            String text = BackupManager.exportJson(this);
+            File file = File.createTempFile("record-export-", ".json", getCacheDir());
+            try (OutputStream out = new FileOutputStream(file)) {
+              out.write(text.getBytes(StandardCharsets.UTF_8));
+            }
+            main.post(
+                () -> {
+                  if (isFinishing() || isDestroyed()) {
+                    file.delete();
+                    return;
+                  }
+                  if (exportFile != null) exportFile.delete();
+                  exportFile = file;
+                  Intent i =
+                      new Intent(Intent.ACTION_CREATE_DOCUMENT)
+                          .setType("application/json")
+                          .addCategory(Intent.CATEGORY_OPENABLE)
+                          .putExtra(
+                              Intent.EXTRA_TITLE, "随手记事-" + java.time.LocalDate.now() + ".json");
+                  startActivityForResult(i, 101);
+                });
+          } catch (Exception ex) {
+            main.post(
+                () -> {
+                  if (!isFinishing()) status.setText(ex.getMessage());
+                });
+          }
+        });
+  }
+
+  @Override
+  protected void onSaveInstanceState(Bundle b) {
+    super.onSaveInstanceState(b);
+    if (exportFile != null) b.putString("export_file", exportFile.getName());
+  }
+
+  @Override
+  protected void onRestoreInstanceState(Bundle b) {
+    super.onRestoreInstanceState(b);
+    String name = b.getString("export_file");
+    if (name != null && name.matches("record-export-[A-Za-z0-9-]+\\.json"))
+      exportFile = new File(getCacheDir(), name);
+  }
+
+  @Override
+  protected void onActivityResult(int request, int result, Intent data) {
+    super.onActivityResult(request, result, data);
+    if (request != 101 && request != 102) return;
+    if (result != RESULT_OK || data == null || data.getData() == null) {
+      if (request == 101 && exportFile != null) {
+        exportFile.delete();
+        exportFile = null;
+      }
+      return;
     }
+    Uri uri = data.getData();
+    status.setText(request == 101 ? "正在导出…" : "正在导入…");
+    final File source = exportFile;
+    worker.execute(
+        () -> {
+          String message;
+          try {
+            if (request == 101) {
+              if (source == null || !source.isFile())
+                throw new IllegalStateException("导出内容已失效，请重新导出。");
+              try (OutputStream out = getContentResolver().openOutputStream(uri);
+                  FileInputStream in = new FileInputStream(source)) {
+                if (out == null) throw new IllegalStateException("无法打开目标文件。");
+                byte[] buffer = new byte[8192];
+                int n;
+                while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
+              } finally {
+                source.delete();
+              }
+              message = "记录备份已导出";
+            } else {
+              JSONObject summary = BackupManager.importUri(this, uri);
+              message =
+                  "导入完成：新增 "
+                      + summary.optInt("imported")
+                      + " 条，跳过 "
+                      + summary.optInt("skipped")
+                      + " 条。";
+            }
+          } catch (Exception ex) {
+            message = ex.getMessage() == null ? "文件操作未完成。" : ex.getMessage();
+          }
+          final String completed = message;
+          main.post(
+              () -> {
+                if (request == 101) exportFile = null;
+                if (!isFinishing()) status.setText(completed);
+              });
+        });
+  }
+
+  @Override
+  public void onRequestPermissionsResult(int request, String[] p, int[] results) {
+    super.onRequestPermissionsResult(request, p, results);
+    if (request == 71) {
+      ReminderScheduler.refresh(this);
+      status.setText(
+          results.length > 0 && results[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
+              ? "已允许提醒"
+              : "提醒权限尚未开启，可稍后在系统设置中允许。");
+    }
+  }
+
+  private void open(String url) {
+    try {
+      startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+    } catch (Exception ex) {
+      Toast.makeText(this, "未找到可打开链接的浏览器。", Toast.LENGTH_SHORT).show();
+    }
+  }
+
+  @Override
+  protected void onDestroy() {
+    worker.shutdown();
+    main.removeCallbacksAndMessages(null);
+    super.onDestroy();
+  }
 }

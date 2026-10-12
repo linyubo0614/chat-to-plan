@@ -1,8 +1,0 @@
-{
-  "name": "@chat-planner/openclaw-tools",
-  "version": "0.5.1",
-  "description": "Record validated plans using the model already connected to OpenClaw",
-  "type": "module",
-  "engines": { "node": ">=22" },
-  "openclaw": { "extensions": ["./index.mjs"] }
-}

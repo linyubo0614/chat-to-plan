@@ -1,0 +1,4 @@
+<resources>
+    <item name="chat_input" type="id" />
+    <item name="chat_send" type="id" />
+</resources>

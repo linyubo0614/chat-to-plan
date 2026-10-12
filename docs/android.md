@@ -1,50 +1,35 @@
-> 0.7.2 修复配对页无法截屏，改为页内扫码并明确处理相机权限／启动失败；粘贴连接会先检查中转并区分 DNS、超时、电脑离线和无效地址。手机不开 VPN 无法访问 workers.dev 时，参见 [自定义域名说明](custom-domain.md)。
+# 安卓安装与构建
 
-> 0.7.0 新增简约界面与“重要日期”，支持 DDL、考试、倒计时和加入系统日历提醒。详见 [重要日期说明](important-dates.md)。电脑服务也需更新到 0.7.0，保留原 `data` 文件夹。
+## 安装
 
-> 0.6.0 新增“扫码连接电脑”和“一键配置 HITA”。固定 workers.dev 地址与设备凭据持久保存，正常重启无需重新扫码。详情见 [Windows 步骤](windows.md)。
+在 [Releases](https://github.com/linyubo0614/chat-to-plan/releases) 下载手机本地版 `chat-planner-debug.apk`，允许安装该来源的 APK。支持 Android 8.0 及以上。
 
-# 安卓控制 App
+第一页是内置 DeepSeek 对话，计划和备忘页面使用相同简约风格。配置自己的 API Key 后即可用自然语言记录；不配置 Key 也可以手动管理本地数据。App 允许截屏，不需要摄像头或电脑配对。
 
-源代码位于 `android/`，原生 Java UI，没有第三方 Android 运行时依赖。需要 JDK 17 或 21、Android SDK Platform 35、Build Tools 35.0.0 和 Gradle 8.11.1。
+## 本地构建
 
-在受限云环境也可从仓库根目录运行 `python3 scripts/build_android.py --sdk <SDK路径> --jdk <JDK路径>`，它使用已提交的 Gradle wrapper、持久缓存和系统 Java 信任库处理现有代理，不关闭 TLS 验证。通过 SDK Manager 安装平台和接受标准 SDK 许可。
+准备 JDK 21、Android SDK 35 和 Build Tools 35.0.0，使用仓库内 Gradle Wrapper：
+
+```bash
+python3 scripts/build_android.py --sdk /path/to/sdk --jdk /path/to/jdk
+```
+
+输出：`android/app/build/outputs/apk/debug/app-debug.apk`。需要编译模拟器测试包时加 `--instrumentation-build`。
 
 ```bash
 cd android
-./gradlew --no-daemon assembleDebug lintDebug
+./gradlew --no-daemon testDebugUnitTest
+./gradlew --no-daemon connectedDebugAndroidTest
 ```
 
-调试 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 也会上传 `chat-planner-debug-apk` 构建产物。首版 APK 保存在 downloads 供旧版下载；后续版本通过 GitHub Releases 分发。
+仪器测试需要已经启动的设备／模拟器。测试使用模拟 API 响应，验证操作结果及追问流程，不发送真实 Key，也不消耗 DeepSeek 余额。没有安装 HITA 兼容版时，其跨 App 测试允许跳过；CI 的 HITA 专项任务会安装两款 APK，强制验证接口。
 
-真机输入自己的 HTTPS 服务地址；调试版在安卓模拟器内可使用 `http://10.0.2.2:8000` 访问宿主机服务。仅此模拟器域名允许 HTTP，正式版只允许 HTTPS；请勿为了连接失败而全局关闭 TLS 校验。
+## 签名
 
-功能：
+HITA 本地接口采用签名权限，因此两款 APK 必须由同一证书签署。本地构建脚本创建并复用未跟踪的 `.build-cache/preview.keystore`；也可以用 `PLANNER_PREVIEW_KEYSTORE` 指向本地测试密钥文件。不要把密钥文件提交到仓库。
 
-- 月历选日期、四象限待办、完成标记、移动日期和版本保护编辑。
-- 自定义分类备忘、分类筛选、标题/正文搜索、创建、编辑和删除。
-- 前台每约3秒读取新记录；不自动打开界面。
+CI 在临时目录生成测试密钥，发布的随手记事和 HITA 两款 APK 在同一个作业中使用该密钥构建。密钥不上传为 Artifact，也不进入 Gradle 缓存。同一次发布的两包签名匹配；不同构建之间可能不同，不能保证覆盖安装。
 
-- 保存服务地址、使用安卓密钥库保护连接口令。
-- 读取和保存服务器处理开关；操作不依赖 App 持续运行。
-- 配置/移除 DeepSeek Key、选择模型；Key 不在设备本地持久保存。
-- 查看队列状态、发送测试消息并显示结果或明确失败。
-- 分页查看服务器消息历史，查看自定义分类、时间、待补充问题和实际写入状态。
-- 对失败消息重试分析，修改或取消尚未写入的事项；版本冲突要求刷新。
-- 消息发送失败可沿用同一编号重试；待确认消息使用安卓密钥库加密保存。
-- API Key 不回显，敏感界面禁截图，禁止应用备份。
+Android 提示签名不兼容时，先导出记录备份；HITA 也应先导出并核对课表／日程备份，然后再卸载重装。
 
-连接口令具有完整的实例管理权限。更换服务器时必须重新输入口令，App 不会把旧口令自动发送给新地址。首次连接要求输入口令，错误或未验证的地址不会覆盖保存的连接。
-
-后台课程连接由独立 HITA 兼容版承载，见 [说明](hita.md)；控制 App 不申请无障碍权限。App 设置中显示各软件的真实接入状态。功能开关必须点击“保存设置”才会生效。
-
-正式发布前需要：
-
-1. 在实际手机测试布局、键盘、连接、密钥持久化、重启、API 设置和暂停/恢复。
-2. 使用自己的 release keystore 签名，安全保存签名密钥，不提交 Git。
-3. 配置服务端 HTTPS、连接口令轮换及备份。
-4. 完成真实微信收发和目标应用写入验收。
-
-调试包用于验证，不代表已完成签名发布、真机兼容或消息入口开通。
-
-推送 `v*-preview` 标签会触发发布工作流，复用后端及 Android 检查，然后从本次构建产物发布 APK 与 SHA256SUMS。不同 CI 机器生成的调试签名可能不同，不能保证覆盖安装；正式持续更新前必须配置固定的正式签名密钥。旧调试包卸载会清除 App 本地连接设置及尚未确认的发送草稿，不会删除服务器记录。
+正式发行时，使用开发者自己的私有证书，通过受保护的 Secrets 提供给构建环境，同时签署两款 App。妥善备份私有密钥；更换证书无法覆盖已有不同签名的安装。

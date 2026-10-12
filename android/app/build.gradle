@@ -10,15 +10,22 @@ android {
         applicationId 'cn.chatplanner.control'
         minSdk 26
         targetSdk 35
-        versionCode 9
-        versionName '0.7.2'
+        versionCode 10
+        versionName '0.8.0'
         testInstrumentationRunner 'android.test.InstrumentationTestRunner'
     }
     buildFeatures { buildConfig true }
+    signingConfigs {
+        preview {
+            storeFile System.getenv('PLANNER_PREVIEW_KEYSTORE') ? file(System.getenv('PLANNER_PREVIEW_KEYSTORE')) : rootProject.file('../.build-cache/preview.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+    buildTypes { debug { signingConfig signingConfigs.preview } }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
 }
-
-dependencies { implementation 'com.journeyapps:zxing-android-embedded:4.3.0' }

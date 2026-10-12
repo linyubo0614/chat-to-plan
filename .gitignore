@@ -23,4 +23,3 @@ android/local.properties
 node_modules/
 .wrangler/
 .wheelhouse/
-!downloads/chat-planner-0.1.0-debug.apk

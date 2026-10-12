@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -44,6 +45,15 @@ def main():
     if args.jdk: env["JAVA_HOME"]=str(Path(args.jdk).resolve())
     env.setdefault("GRADLE_USER_HOME",str(root/".build-cache/gradle"))
     env.setdefault("ANDROID_USER_HOME",str(root/".build-cache/android"))
+    # Reuse the owner's local test key, or the per-job CI key. Never publish
+    # private signing material; both APKs need the same certificate for IPC.
+    configured_key = env.get("PLANNER_PREVIEW_KEYSTORE", "")
+    preview_key = Path(configured_key).expanduser().resolve() if configured_key else root / ".build-cache/preview.keystore"
+    if not configured_key:
+        run([sys.executable, str(root / "scripts/prepare_signing.py"), "--output", str(preview_key)], env=env)
+    if not preview_key.is_file():
+        raise SystemExit("The configured test signing key does not exist")
+    env["PLANNER_PREVIEW_KEYSTORE"] = str(preview_key.resolve())
     # Never bake the owner's personal model keys into the upstream BuildConfig.
     env.pop("DEEPSEEK_API_KEY",None);env.pop("ZHIPU_API_KEY",None)
     proxy=urlsplit(os.getenv("HTTPS_PROXY",""));options=env.get("GRADLE_OPTS","")

@@ -8,291 +8,130 @@ on:
 permissions:
   contents: read
 jobs:
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: requirements.windows.txt
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '24'
-      - run: python -m pip install -r requirements.windows.txt
-      - name: Validate PowerShell syntax
-        shell: powershell
-        run: |
-          Get-ChildItem windows/*.ps1 | ForEach-Object {
-            $Tokens = $null; $ParseErrors = $null
-            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$Tokens,[ref]$ParseErrors) | Out-Null
-            if ($ParseErrors.Count) { throw $ParseErrors }
-          }
-      - run: python -m unittest discover -s tests -v
-      - run: python -m scripts.generate_openclaw_schema --check
-      - run: node --test tests/test_openclaw_plugin.mjs
-      - name: Verify Windows-account credential encryption
-        shell: powershell
-        run: |
-          Add-Type -AssemblyName System.Security
-          $Plain = [Text.Encoding]::UTF8.GetBytes('temporary-credential-check')
-          $Encrypted = [Security.Cryptography.ProtectedData]::Protect($Plain,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)
-          $Restored = [Security.Cryptography.ProtectedData]::Unprotect($Encrypted,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)
-          if ([Text.Encoding]::UTF8.GetString($Restored) -ne 'temporary-credential-check') { throw 'DPAPI check failed' }
-      - name: Start actual Windows deployment and verify HTTP
-        shell: powershell
-        run: |
-          python -m venv .venv
-          $Server = Start-Process powershell.exe -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','windows/start-assistant.ps1' -PassThru -RedirectStandardOutput 'windows-start.log' -RedirectStandardError 'windows-start-error.log'
-          try {
-            $Ready = $false
-            for ($Attempt = 0; $Attempt -lt 120; $Attempt++) {
-              if ($Server.HasExited) { throw 'Windows startup exited before ready' }
-              try {
-                Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8000/healthz' | Out-Null
-                $Ready = $true; break
-              } catch { Start-Sleep -Seconds 1 }
-            }
-            if (-not $Ready) { throw 'Windows service did not become ready' }
-            .venv/Scripts/python.exe scripts/smoke.py
-            if ($LASTEXITCODE -ne 0) { throw 'Windows HTTP smoke failed' }
-            $HostRoot = Join-Path $env:RUNNER_TEMP 'OpenClaw host test'
-            npm.cmd install --prefix $HostRoot --ignore-scripts --no-audit --no-fund openclaw@2026.10.1
-            if ($LASTEXITCODE -ne 0) { throw 'Pinned OpenClaw installation failed' }
-            $env:PATH = (Join-Path $HostRoot 'node_modules/.bin') + ';' + $env:PATH
-            $env:OPENCLAW_STATE_DIR = Join-Path $HostRoot 'state'
-            $env:OPENCLAW_CONFIG_PATH = Join-Path $env:OPENCLAW_STATE_DIR 'openclaw.json'
-            New-Item -ItemType Directory -Path $env:OPENCLAW_STATE_DIR -Force | Out-Null
-            $Seed = '{"agents":{"ownership":"explicit","defaults":{"systemAgent":{"agentId":"main"},"model":{"primary":"openai/gpt-6"}},"entries":{"main":{"model":"openai/gpt-6","tools":{"allow":["read"]}},"helper":{"model":"openai/gpt-6","subagents":{"model":"openai/gpt-6"}}}},"tools":{"alsoAllow":["existing-tool"]}}'
-            [IO.File]::WriteAllText($env:OPENCLAW_CONFIG_PATH,$Seed,(New-Object Text.UTF8Encoding($false)))
-            powershell.exe -NoProfile -ExecutionPolicy Bypass -File windows/install-openclaw.ps1
-            if ($LASTEXITCODE -ne 0) { throw 'Native OpenClaw installer failed' }
-            $Config = Get-Content $env:OPENCLAW_CONFIG_PATH -Raw | ConvertFrom-Json
-            if ($Config.agents.defaults.model.primary -ne 'openai/gpt-6') { throw 'Existing model changed' }
-            if ($Config.tools.alsoAllow -notcontains 'existing-tool') { throw 'Existing tool permission removed' }
-            if ($Config.tools.alsoAllow -notcontains 'chat_planner_record') { throw 'Planner tools missing' }
-            python -c "from tools.openclaw_config import OpenClaw; c=OpenClaw('.'); print('DeepSeek agents configured:',c.configure_deepseek('only-a-fake-key-for-native-schema-test')); c.inspect()"
-            if ($LASTEXITCODE -ne 0) { throw 'Native DeepSeek all-agent configuration failed' }
-            $Updated = Get-Content $env:OPENCLAW_CONFIG_PATH -Raw | ConvertFrom-Json
-            python scripts/verify_openclaw_host.py
-            if ($LASTEXITCODE -ne 0) { throw 'Official model-tool-backend loop failed' }
-            if ($Updated.agents.defaults.model.primary -ne 'deepseek/deepseek-flash') { throw 'Default model not DeepSeek' }
-            $Agents = @($Updated.agents.list)
-            if ($Updated.agents.entries) { $Agents = @($Updated.agents.entries.PSObject.Properties | ForEach-Object { $_.Value }) }
-            foreach ($Agent in $Agents) {
-              if ($Agent.model.primary -ne 'deepseek/deepseek-flash' -or $Agent.subagents.model.primary -ne 'deepseek/deepseek-flash') { throw 'Agent override still uses old model' }
-              if ($Agent.tools.allow -and $Agent.tools.allow -notcontains 'chat_planner_record') { throw 'Agent tool policy blocks recording' }
-            }
-
-          } finally { taskkill.exe /PID $Server.Id /T /F | Out-Null }
-      - name: Build standalone desktop software
-        shell: powershell
-        run: |
-          python -m pip install -r requirements.desktop-build.txt
-          python scripts/build_windows.py
-          if ($LASTEXITCODE -ne 0) { throw 'Desktop executable build failed' }
-      - name: Verify standalone desktop UI and server without Python installation
-        shell: powershell
-        run: |
-          $Standalone = Join-Path $env:RUNNER_TEMP 'Standalone 中文 path'
-          New-Item -ItemType Directory -Path $Standalone -Force | Out-Null
-          Copy-Item dist/ChatPlanner.exe $Standalone
-          Copy-Item dist/ChatPlannerMcp.exe $Standalone
-          $Exe = Join-Path $Standalone 'ChatPlanner.exe'
-          $Ui = Start-Process $Exe -ArgumentList '--check-ui' -PassThru
-          if (-not $Ui.WaitForExit(30000) -or $Ui.ExitCode -ne 0) { throw 'Standalone desktop UI failed' }
-          python -c "from desktop.controller import Controller; from pathlib import Path; c=Controller(Path(r'$Standalone')); c.prepare()"
-          $Server = Start-Process $Exe -ArgumentList '--serve' -PassThru
-          try {
-            $Ready = $false
-            for ($Attempt=0; $Attempt -lt 60; $Attempt++) {
-              if ($Server.HasExited) { throw 'Standalone service exited' }
-              try { Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8000/healthz' | Out-Null; $Ready=$true; break } catch { Start-Sleep -Seconds 1 }
-            }
-            if (-not $Ready) { throw 'Standalone service did not start' }
-            $Token = (Get-Content (Join-Path $Standalone 'data/api-token') -Raw).Trim()
-            $Status = Invoke-RestMethod 'http://127.0.0.1:8000/v1/status' -Headers @{Authorization="Bearer $Token"}
-            if ($Status.integrations.planner -ne 'calendar_quadrants_and_memos') { throw 'Standalone runtime wrong' }
-            python scripts/verify_mcp_exe.py $Standalone
-            if ($LASTEXITCODE -ne 0) { throw 'Standalone MCP server failed' }
-            $Record = '{"record_id":"dddddddddddddddddddddddddddddddd","kind":"memo","title":"standalone desktop test","category":"test","body":"real executable"}'
-            $Saved = Invoke-RestMethod 'http://127.0.0.1:8000/v1/planner/records' -Method POST -Headers @{Authorization="Bearer $Token"} -ContentType 'application/json' -Body $Record
-            if ($Saved.record.title -ne 'standalone desktop test') { throw 'Standalone real save failed' }
-          } finally { taskkill.exe /PID $Server.Id /T /F | Out-Null }
-      - name: Verify extracted bundle, including Unicode and spaces
-        shell: powershell
-        run: |
-          python scripts/package_windows.py --output chat-planner-windows.zip
-          $Extract = Join-Path $env:RUNNER_TEMP 'Planner 中文 path with spaces'
-          Expand-Archive chat-planner-windows.zip -DestinationPath $Extract -Force
-          $Root = Join-Path $Extract 'ChatPlanner'
-          if (-not (Test-Path (Join-Path $Root 'ChatPlanner.exe'))) { throw 'Desktop software missing from ZIP' }
-          if (-not (Test-Path (Join-Path $Root 'openclaw/record.schema.json'))) { throw 'Plugin missing from ZIP' }
-          if (-not (Test-Path (Join-Path $Root 'windows/install-openclaw.cmd'))) { throw 'Installer missing from ZIP' }
-          if (-not (Test-Path (Join-Path $Root 'ChatPlannerMcp.exe'))) { throw 'MCP executable missing from ZIP' }
-          if (-not (Test-Path (Join-Path $Root 'relay/worker.mjs'))) { throw 'Cloud relay missing from ZIP' }
-          if (Test-Path (Join-Path $Root 'data')) { throw 'Private data packaged' }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: chat-planner-windows-package
-          path: |
-            chat-planner-windows.zip
-            dist/ChatPlanner.exe
-            dist/ChatPlannerMcp.exe
-          if-no-files-found: error
-  backend:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: requirements.lock
-      - run: pip install -r requirements.lock
-      - run: python -m unittest discover -s tests -v
   android:
     runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
-      - name: Verify runner Android SDK
+      - name: Create an ephemeral test signing key
         run: |
-          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
-          test -x "$ANDROID_HOME/build-tools/35.0.0/aapt2"
-      - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew --no-daemon assembleDebug lintDebug
-        working-directory: android
-      - uses: actions/upload-artifact@v4
-        with:
-          name: chat-planner-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-  planner-ui:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - uses: gradle/actions/setup-gradle@v4
-      - run: pip install -r requirements.lock
-      - name: Start real test backend and seed a structured WeChat plan
-        env:
-          ASSISTANT_API_TOKEN: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-          ASSISTANT_DB: /tmp/planner-ui.db
-        run: |
-          python -m uvicorn backend.app:create_app --factory --host 0.0.0.0 --port 8000 --no-access-log > /tmp/planner-ui.log 2>&1 &
-          python - <<'PY'
-          import time, httpx
-          from datetime import datetime
-          from zoneinfo import ZoneInfo
-          for attempt in range(30):
-              try:
-                  httpx.get('http://127.0.0.1:8000/healthz').raise_for_status();break
-              except httpx.HTTPError: time.sleep(1)
-          day=datetime.now(ZoneInfo('Asia/Shanghai')).date().isoformat()
-          result=httpx.post('http://127.0.0.1:8000/v1/openclaw/plans',headers={'Authorization':'Bearer '+'a'*32},json={
-              'message_id':'ui-wechat-example','text':'今天交作业；她喜欢茉莉花茶',
-              'interpretation':{'items':[
-                  {'kind':'todo','title':'CI 微信待办','task_date':day,'important':True,'urgent':True,'category':'高数'},
-                  {'kind':'memo','title':'喜欢的茶','body':'茉莉花茶','category':'女朋友'}]}})
-          result.raise_for_status()
-          assert all(t['status']=='written' for t in result.json()['message']['tasks'])
-          PY
-      - run: sudo chmod 666 /dev/kvm
-      - uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          target: google_apis
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back emulated -camera-front emulated
-          script: bash scripts/test_android_ui.sh
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: planner-ui-results-and-previews
-          path: |
-            android/app/build/outputs/androidTest-results/connected/
-            planner-previews/
-          if-no-files-found: warn
-  hita:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: gradle/actions/setup-gradle@v4
+          python3 scripts/prepare_signing.py --output "$RUNNER_TEMP/preview-signing/preview.keystore"
+          echo "PLANNER_PREVIEW_KEYSTORE=$RUNNER_TEMP/preview-signing/preview.keystore" >> "$GITHUB_ENV"
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
-      - name: Prepare SDK 36
-        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
-      - name: Build pinned HITA compatible version and run upstream tests
-        run: python3 scripts/build_hita.py --output "$RUNNER_TEMP/hita-planner" --sdk "$ANDROID_HOME" --jdk "$JAVA_HOME"
-      - name: Enable Android emulator acceleration
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build, lint and test the standalone Android app
+        run: ./gradlew --no-daemon --max-workers=2 assembleDebug lintDebug testDebugUnitTest
+        working-directory: android
+      - name: Verify APK signature
+        run: '"$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs android/app/build/outputs/apk/debug/app-debug.apk'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-unit-and-lint-results
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/reports/lint-results-debug.html
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chat-planner-build-only-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+  android-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Create an ephemeral test signing key
         run: |
-          sudo chmod 666 /dev/kvm
-      - name: Verify bridge writes against real Android Room database
+          python3 scripts/prepare_signing.py --output "$RUNNER_TEMP/preview-signing/preview.keystore"
+          echo "PLANNER_PREVIEW_KEYSTORE=$RUNNER_TEMP/preview-signing/preview.keystore" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: sudo chmod 666 /dev/kvm
+      - name: Verify local records, conversations and UI without a desktop server
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: cd "$RUNNER_TEMP/hita-planner" && ./gradlew --no-daemon --max-workers=2 :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=cn.limpu.hita.planner.PlannerWriteInstrumentedTest
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash scripts/test_android_ui.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: hita-planner-room-test-results
-          path: ${{ runner.temp }}/hita-planner/app/build/outputs/androidTest-results/connected/
+          name: android-ui-results-and-previews
+          path: |
+            android/app/build/outputs/androidTest-results/connected/
+            planner-previews/
           if-no-files-found: warn
+  hita:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      PLANNER_PREVIEW_KEYSTORE: ${{ runner.temp }}/preview-signing/preview.keystore
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Create an ephemeral test signing key
+        run: |
+          python3 scripts/prepare_signing.py --output "$RUNNER_TEMP/preview-signing/preview.keystore"
+          echo "PLANNER_PREVIEW_KEYSTORE=$RUNNER_TEMP/preview-signing/preview.keystore" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Build pinned HITA compatible version and run upstream tests
+        run: python3 scripts/build_hita.py --output "$RUNNER_TEMP/hita-planner" --sdk "$ANDROID_HOME" --jdk "$JAVA_HOME"
+      - name: Build the app used by the cross-app integration test
+        run: ./gradlew --no-daemon --max-workers=2 assembleDebug assembleDebugAndroidTest
+        working-directory: android
+      - name: Enable Android emulator acceleration
+        run: sudo chmod 666 /dev/kvm
+      - name: Verify HITA Room writes and the local cross-app connection
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r "$RUNNER_TEMP/hita-planner/app/build/outputs/apk/debug/app-debug.apk"
+            cd "$RUNNER_TEMP/hita-planner" && ./gradlew --no-daemon --max-workers=2 :app:connectedDebugAndroidTest
+            cd "$GITHUB_WORKSPACE/android" && ./gradlew --no-daemon --max-workers=2 connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.requireHita=true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hita-room-and-local-connection-test-results
+          path: |
+            ${{ runner.temp }}/hita-planner/app/build/outputs/androidTest-results/connected/
+            android/app/build/outputs/androidTest-results/connected/
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chat-planner-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: hita-planner-debug-apk
           path: ${{ runner.temp }}/hita-planner/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-
-  relay-mcp:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '24'
-      - run: pip install -r requirements.lock
-      - name: Install pinned relay runtime and Harness MCP SDK
-        run: npm install --prefix "$RUNNER_TEMP/relay-test" --no-audit --no-fund wrangler@4.45.0 @modelcontextprotocol/client@2.0.0
-      - name: Verify real relay and stdio MCP traffic
-        env:
-          WRANGLER_SEND_METRICS: 'false'
-          NO_PROXY: '127.0.0.1,localhost'
-        run: |
-          mkdir -p "$RUNNER_TEMP/relay-runtime"
-          cp relay/* "$RUNNER_TEMP/relay-runtime/"
-          "$RUNNER_TEMP/relay-test/node_modules/.bin/wrangler" dev --config "$RUNNER_TEMP/relay-runtime/wrangler.toml" --local --port 8791 --var BRIDGE_SECRET:synthetic-local-bridge-test --show-interactive-dev-session=false > "$RUNNER_TEMP/relay.log" 2>&1 &
-          RELAY_PID=$!
-          trap 'kill "$RELAY_PID" || true' EXIT
-          for attempt in $(seq 1 60); do
-            if curl -s http://127.0.0.1:8791/healthz > /dev/null; then break; fi
-            sleep 1
-          done
-          MCP_SDK_ROOT="$RUNNER_TEMP/relay-test" python -m scripts.verify_relay --mcp

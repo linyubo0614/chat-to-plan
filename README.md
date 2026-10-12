@@ -1,4 +1,4 @@
-# 随手记事｜微信、QQ 驱动的大学生活备忘与计划工具
+# 随手记事｜用对话整理任务、备忘与日程
 
 本项目完全采用 Vibe Coding 方式开发，使用模型为 GPT-6.1-sol。
 
@@ -6,157 +6,100 @@
 
 多数人习惯通过 QQ、微信给自己发送消息，短期保存需要记住的事情；同时，面向哈工大学生的非官方 HITA 程序提供了日程与课表管理功能。由此产生了一个想法：将熟悉的聊天入口与结构化的事务管理连接起来，让随手发出的消息能够转化为备忘、任务和重要日期。这个项目便是借助 AI 对这一想法的具体实现。
 
-项目面向所有有类似需求的使用者。考虑到 HITA 的校园使用场景，其接入被保留为可选扩展；未安装或配置 HITA，也可以完整使用任务、备忘、DDL 和重要日期等核心功能。
+现在，聊天入口已整合到随手记事 App 内。手机直接调用 DeepSeek API，记录保存在手机本地，不再需要电脑、Harness、QQ／微信机器人、Cloudflare 或域名。
 
-## 项目简介
+项目面向所有有类似需求的使用者。考虑到 HITA 的校园使用场景，其接入被保留为可选扩展；未安装或配置 HITA，也可以完整使用任务、备忘、DDL、重要日期和本地日程等核心功能。
 
-一个简约的个人任务与备忘工具。可以在安卓 App 里直接记录，也可以在微信、QQ 中告诉 DeepSeek Harness，让它整理并保存到同一个数据库。
+## 从聊天开始
 
-**不安装、不配置 HITA，也能正常使用每日任务、分类备忘、日历、DDL 和考试等重要日期。** HITA 仅用于额外的课程／日程同步。
+打开 App，第一页就是与 DeepSeek 的对话。用一句话记录事情、补充细节或修改已有内容，结果在聊天中反馈；四象限、DDL、日历和备忘页面用来查看、手动整理记录。
 
-## 能做什么
-
-| 功能 | 用法 |
+| 你可以这样说 | 处理方式 |
 | --- | --- |
-| 每日任务 | 用重要／紧急四象限安排任务，支持完成、编辑和删除 |
-| 分类备忘 | 自定义分类，例如高数、英语、女朋友；支持搜索和编辑 |
-| 重要日期 | 记录 DDL、考试等；支持全天或具体时间、倒计时和逾期状态 |
-| 月历 | 查看每天的任务，用 ◆ 标出未完成的重要日期 |
-| 微信／QQ记录 | 通过 dsh-im 使用现有 Harness 模型，整理后调用本项目的保存工具 |
-| 手机日历提醒 | 点击“加入日历提醒”，在手机日历中选择提醒时间并保存 |
-| HITA（可选） | 将明确的单次课程、日程写入 HITA 兼容版，并核对写入结果 |
+| “周五晚上十点前交高数作业，比较重要。” | 创建带截止日期的任务，显示分类、象限和时间 |
+| “记一下：宿舍门禁晚上十一点。” | 保存分类备忘 |
+| “11 月 7 日上午九点高数考试，二教 302。” | 保存考试日期和地点 |
+| “明天下午开会。” | 需要精确日程时，追问开始、结束时间 |
+| “把刚才那个作业改到周日截止。” | 修改对应记录，并反馈实际修改结果 |
+| “帮我把明天三点到四点的会议写进 HITA。” | 已授权 HITA 时写入；未接入时说明需要的设置 |
 
-普通任务、备忘和重要日期保存在电脑数据库，安卓 App 联网查看。微信／QQ记录复用 Harness 当前模型，不额外调用第二个模型。
+**DDL 是事项类型，四象限是优先级。** 一条有截止时间的任务可以同时出现在 DDL 页面和所属象限中，编辑的是同一条记录。模型给出的分类可以继续用自然语言调整，也可以手动修改。
 
-## 下载与准备
+遇到缺少日期、结束时间或存在多个同名事项时，助手会追问；你的下一条回答继续补全原请求。保存、修改、删除由 App 执行，聊天反馈依据本地实际操作结果。模型分类可能有误，请核对结果卡片中的日期、对象和内容。
 
-从 [GitHub Releases](https://github.com/linyubo0614/vibecoding_test_01/releases) 选择最新版；当前为 [0.7.2 预览版](https://github.com/linyubo0614/chat-to-plan/releases/tag/v0.7.2-preview)（修复扫码与截图，新增自定义域名入口）。
+## 安装与首次使用
 
-| 文件 | 是否需要 |
+从 [GitHub Releases](https://github.com/linyubo0614/chat-to-plan/releases) 下载 **0.8.0 及以后的手机本地版**。0.7.x 使用已停止维护的电脑连接架构，不适用于下面的步骤；旧代码和安装包可在 Git 历史及历史 Releases 查看。
+
+| 文件 | 用途 |
 | --- | --- |
-| `chat-planner-windows.zip` | 必需。电脑端完整包，包含主程序、Harness MCP 工具程序和中转部署文件 |
-| `chat-planner-debug.apk` | 必需。安卓“对话计划”App |
-| `HITA_Planner_3.0.3-planner.3.apk` | 可选。只有需要 HITA 课程／日程同步时才安装 |
-| `SHA256SUMS` | 可选。用于核对下载文件 |
+| `chat-planner-debug.apk` | 随手记事安卓 App，必需 |
+| `HITA_Planner_*.apk` | HITA 兼容版，按需安装 |
+| `SHA256SUMS` | 核对下载文件的 SHA-256 值 |
 
-推荐环境：Windows 11 电脑、Android 8.0 及以上手机、Node.js（中转配置要求 20.19+，Harness 的版本要求以其官方文档为准）。Windows ZIP 无需安装 Python；请完整解压，不要只下载一个 EXE。
+需要 Android 8.0 或更新版本。第一次使用：
 
-跨网络连接使用你自己的 Cloudflare 免费 Workers 中转，无需购买域名。没有账号时先 [注册 Cloudflare](https://dash.cloudflare.com/sign-up)，验证邮箱，并按控制台提示开通 Workers 与免费的 `workers.dev` 子域名。项目不会自动开通付费计划，实际使用受 Cloudflare 免费额度和网络可达性限制。
+1. 安装随手记事，打开设置。
+2. 在 [DeepSeek 开放平台](https://platform.deepseek.com/) 创建自己的 API Key，并确认 API 账户有可用额度。
+3. 在 App 设置中保存 Key 和模型。默认使用 `deepseek-flash`，可按照账户实际可用模型调整。
+4. 回到第一页发送一条记录请求，查看反馈，再到计划／备忘页面核对结果。
+5. 需要本地提醒时，允许 App 发送通知；需要 HITA 时，再按下一节授权。
 
-**Cloudflare 授权成功不代表中转配置完成。** 首次使用必须先在控制台开通 Workers 与 `workers.dev` 子域名，再回到电脑程序授权部署。完整操作与错误排查见 [Cloudflare 使用说明](docs/cloudflare.md)。
+DeepSeek 网页版账号的使用额度与 API 计费并不等同。**AI 理解、追问和自然语言编辑需要联网，并产生 DeepSeek API 费用**；记录查看、手动创建／编辑、本地提醒和备份不需要电脑或 AI 接口。
 
-只在 App 里记录时，无需安装 Harness 或 dsh-im。希望在微信／QQ里记录时，再完成下面的助手接入步骤。
+无需配置服务器地址、扫码连接、购买域名，也无需安装 Harness 或 dsh-im。详细说明见 [DeepSeek API 配置](docs/deepseek.md)。
 
-若手机只有开 VPN 才能访问 `workers.dev`，可按 [自定义域名说明](docs/custom-domain.md) 购买域名、绑定原 Worker，并在关闭 VPN 时实测。0.7.2 支持电脑自定义入口和手机扫码／截图修复。
+## HITA 是可选扩展
 
-## 第一步：连接电脑与手机
+普通任务、备忘、DDL、考试日期和本地日程都保存在随手记事中。不需要 HITA 的用户可以跳过本节。
 
-1. 电脑完整解压 Windows ZIP，运行 `ChatPlanner.exe`。
-2. 先按 [Cloudflare 使用说明](docs/cloudflare.md) 完成 Workers 与子域名首次开通，再点击“配置 / 更新免费中转”，在浏览器登录自己的账号并授权。首次下载部署依赖可能需要几分钟。
-3. 配置成功后点击“启动服务”，等待“固定中转已连接”，再点击“显示手机配对二维码”。
-4. 手机安装安卓 APK，打开“对话计划 → 设置 → 扫码连接电脑”，扫描二维码并确认。
-5. 回到 App，就可以添加任务、写备忘和记录重要日期。**此时不需要配置 HITA。**
+希望在 HITA 管理课程／日程时：
 
-二维码五分钟内有效，只能领取一次。配对成功后会保存固定地址和设备凭据；正常重启无需重新填写地址、口令或扫码。重装／清除手机 App 数据、删除电脑 `data` 或撤销设备后需要重新配对。
+1. 安装同一次发布提供的 HITA 兼容版 APK。原版 HITA 不提供本项目的本地接口。
+2. 在随手记事设置中打开 HITA 授权入口，在 HITA 中确认允许本地访问。
+3. 回到随手记事，用对话查询、新增、修改或删除 HITA 中的单次日程／课程。
 
-详细步骤与网络排查见 [Windows 连接说明](docs/windows.md)。
+两款 App 在同一手机上通过受权限控制的本地接口通信；不使用网络中转，也不需要后台持续连接。授权可在 HITA 中撤销。找到多个匹配事项时先选择目标，再执行操作。
 
-## 第二步：接入微信／QQ（可选）
+HITA 的课程／日程格式有自身限制，不支持的请求会给出说明。AI 对话需要联网，HITA 本地读写本身不需要联网。详见 [HITA 使用与构建说明](docs/hita.md)。
 
-### 1. 准备 DeepSeek Harness
+## 数据、提醒与升级
 
-先按 [DeepSeek Harness 官方说明](https://github.com/deepseek-ai/deepseek-harness/blob/master/README.zh.md) 安装并启动 Harness，完成自己的模型配置，确认能正常对话。本项目的接入验证使用 **Windows 原生 Harness 0.2.0-rc.2**；其他版本请先核对其插件与 MCP 配置方式。
+- 记录和聊天历史保存在手机本地 SQLite 数据库中；API Key 使用 Android Keystore 加密保存，不包含在记录备份中。
+- 调用 AI 时，需要将当前请求、相关对话和用于查找／编辑的记录内容发送给 DeepSeek。手机本地存储不意味着模型处理也离线。
+- 可在设置中导出 JSON 备份并导入恢复。卸载或清除 App 数据前，先保存备份；重装后需要重新填写 Key。
+- 旧版用户可以将停止电脑服务后的 `data/assistant.db` 复制到手机，再使用旧数据库导入入口。旧连接凭据和模型 Key 不导入；原来的电脑文件不会被修改。
+- 本地提醒受通知权限、系统省电和厂商后台限制影响，可能延后；重要考试或截止事项建议同时使用系统日历提醒。App 允许截屏。
+- 同次发布的两款预览 APK 使用匹配的测试签名；不同 CI 构建之间可能采用不同签名，无法保证覆盖升级。安装新版本前先备份随手记事和 HITA 的记录，签名不兼容时再处理重装。
 
-如果已经能通过 dsh-im 在微信／QQ与 Harness 聊天，跳过插件安装，直接进行本节第 3 步。
+迁移步骤、备份范围和冲突规则见 [备份与旧版迁移](docs/migration.md)；日期和提醒用法见 [重要日期说明](docs/important-dates.md)。
 
-### 2. 让 Harness 自己安装 dsh-im
+## 开发
 
-在 **电脑上的 Harness 对话窗口**中复制发送下面的提示词。Harness 需要能够访问网络、执行安装命令及修改自己的配置；若出现操作授权提示，请按实际安装需要授权。
+主 App 为 Java 原生 Android 应用，使用 Android SQLite 和系统通知，直连 DeepSeek HTTPS API。HITA 扩展基于固定上游提交与补丁复现。构建需要 JDK 21、Android SDK 35；可选 HITA 构建另需 SDK 36 和 Python 3。
 
-```text
-请在这台 Windows 电脑上为我安装 dsh-im 插件，让微信和 QQ 可以连接当前的 DeepSeek Harness。
-插件仓库：https://github.com/xmanrui/dsh-im
-
-请先阅读仓库最新 README 和安装说明，检查我实际运行的 Harness 版本、Node.js、DSH_HOME、启动方式和正在使用的 profile。
-按与本机版本兼容的官方方式实际执行安装，不要只列出操作步骤或命令。
-上游目前推荐 npm 插件安装；如果当前使用 web profile，可以核对并采用：
-dsh plugin --profile web add -w @xmanrui/dsh-im
-如果当前使用其他 profile 或 Desktop，请根据实际环境选择正确的安装方式，不要直接照搬 web 配置。
-
-修改前备份相关配置，保留现有模型、API 配置、其他插件和已接入的机器人；已经正确安装时不要重复安装。
-安装完成后检查插件是否加载，告诉我是否需要重启 Harness，以及“设置 → IM机器人”的微信／QQ接入入口。
-需要账号扫码或授权时提示我在本机完成，不要替我假定已登录，也不要在回复中展示密钥或登录凭据。
-如果版本不兼容或安装失败，请报告实际原因及下一步，不要声称安装成功。
+```bash
+python3 scripts/build_android.py --sdk /path/to/android-sdk --jdk /path/to/jdk
+cd android
+./gradlew --no-daemon testDebugUnitTest
+# 已连接 Android 设备或模拟器时：
+./gradlew --no-daemon connectedDebugAndroidTest
 ```
 
-安装后按 Harness 提示重启或刷新，在“设置 → IM机器人”中选择微信或 QQ，按插件页面引导扫码／填写机器人凭据。两种渠道可以只接入其中一种。先发送一条普通消息，确认机器人能够回复，再继续下一步。
+HITA 构建：
 
-dsh-im 是独立社区插件，其安装和渠道接入以 [上游说明](https://github.com/xmanrui/dsh-im#安装) 为准。安装插件与账号扫码是两个步骤，扫码需要本人操作。
+```bash
+python3 scripts/build_hita.py --output /tmp/hita-planner \
+  --sdk /path/to/android-sdk --jdk /path/to/jdk
+```
 
-### 3. 把本项目的计划工具加入 Harness
+输出目录必须是尚不存在的目录；脚本不会重置已有源码。本地构建脚本创建并复用未跟踪的 `.build-cache/preview.keystore`，或使用 `PLANNER_PREVIEW_KEYSTORE` 指定的本地文件，保证同机测试时两包签名一致。CI 在同一个作业中临时生成测试密钥并构建两款发布 APK，私钥不进入仓库、缓存或下载产物。**正式发行应使用开发者私有签名，通过受保护的 Secrets 提供，并同时签署两款 App**。
 
-1. 保持 ChatPlanner 服务运行，电脑点击“加入 Harness 配置”。
-2. 选择当前 Harness 实际使用的 profile 的 `cordis.patch.yml`。安装器会备份并追加本项目配置。
-3. 重启原 Harness。在 dsh-im 所用的会话／Agent Preset 中，确认允许使用下面两个工具：
-   - `mcp__chat-planner__chat_planner_record`：保存记录。
-   - `mcp__chat-planner__chat_planner_status`：查询服务器时间与处理状态。
-4. 通过微信或 QQ 发送一条记录请求，在手机 App 中核对结果。
+CI 检查主 App 构建、Lint、模拟器本地对话／记录，以及 HITA 上游单元测试、Room 数据写入和跨 App 接口。测试通过的精确提交才可发布 APK。实际模型响应、厂商通知行为和个人手机上的 HITA 使用仍需实机核对。
 
-接入后沿用 Harness 已有模型与 Key，不必在本项目里重新填写 DeepSeek Key。详细 profile 路径、临时接入与排查见 [Harness 接入说明](docs/harness.md)。
-
-## 可以这样使用
-
-| 给助手发的话 | 在哪里查看 |
-| --- | --- |
-| “帮我记下明天交高数作业，重要、不紧急。” | App 的明日每日任务 |
-| “记在女朋友分类：她喜欢吃扁食。” | App 的分类备忘 |
-| “记录 DDL：10 月 15 日中午 1 点 29 分交英语作文。” | App 的重要日期与当天任务 |
-| “记下高数考试，11 月 7 日上午，地点教学楼 302。” | App 的重要日期与月历 |
-
-没有微信／QQ接入时，以上内容也可以直接在 App 中创建。重要日期默认可选全天，明确时间时再设置；缺少日期的助手请求会追问。具体用法见 [重要日期说明](docs/important-dates.md)。
-
-点击“加入日历提醒”后，需要在手机日历中选择提前提醒时间并保存。**通知由手机日历负责，App 自身不发送后台日期通知，也不需要 HITA 来提供这项提醒。**
-
-## HITA 扩展（可选）
-
-基本流程到这里已经可以使用。如果还希望把课程／日程自动写入 HITA：
-
-1. 安装发布页中的 HITA 兼容版 APK；原版 HITA 不包含本项目的连接入口。
-2. 在对话计划的设置中点击“一键配置 HITA 连接”，在 HITA 中确认，并按说明开启后台连接。
-3. 在微信／QQ说：“帮我加到 HITA：明天下午三点到四点上高数，二教 301。”然后到 HITA 核对结果。
-
-不接入 HITA 时，跳过本节。连接检查显示“最近 HITA 连接：尚未收到”不会阻止任务、备忘或重要日期保存。明确提交给 HITA 的课程／日程会等待其连接，不会自动变成本 App 的普通任务，也不能视为已写入 HITA。
-
-当前支持单次课程／日程；重复课程自动展开、从微信修改已写入的 HITA 事件尚未实现。详见 [HITA 扩展说明](docs/hita.md)。
-
-## 日常使用、升级与常见问题
-
-- **电脑需要一直开着吗？** 同步和微信／QQ自动记录时，需要电脑联网、ChatPlanner 和 Harness 运行。仅手动使用 App 时不需要 Harness。最小化 ChatPlanner 可以继续运行；关闭窗口会停止它启动的服务。
-- **关掉手机 App，助手还能记录吗？** 可以保存到电脑数据库；App 联网并打开后查看，前台约每三秒刷新一次。
-- **能聊天却没有记录？** 聊天成功只说明 dsh-im 已连通。检查计划工具是否加载、当前机器人的预设是否允许工具，并核对实际保存结果。
-- **软件升级需要重扫吗？** 正常升级保留电脑的整个 `data` 文件夹和手机 App 数据即可。电脑与安卓应使用配套版本；程序移动路径后重新点击“加入 Harness 配置”。
-- **如何备份？** 停止电脑服务后备份整个 `data` 文件夹，其中包含记录、连接配置和凭据；不要把它提交到公开仓库。
-- **APK 提示无法覆盖安装？** 预览版使用调试签名，跨构建可能不能直接覆盖。先保存未确认草稿；已使用 HITA 时，还须导出并核对课表备份，再处理重装。
+[安卓构建](docs/android.md) · [DeepSeek 配置](docs/deepseek.md) · [HITA 扩展](docs/hita.md) · [验证范围](docs/validation.md)
 
 ## 贡献者
 
 1. **[OpenAI Codex](https://openai.com/codex/)（AI 开发助手）**：协助功能实现、界面调整、测试验证和文档编写。
 2. **[linyubo0614](https://github.com/linyubo0614)**：项目发起、需求设计、使用反馈与维护。
-
-## 开发与更多说明
-
-后端 Python 3.12，工具测试 Node.js 24，安卓构建 JDK 21 与 SDK 35。只有构建可选 HITA 兼容版时才另需 SDK 36。
-
-```bash
-bash scripts/install.sh
-.venv/bin/python -m unittest discover -s tests -v
-.venv/bin/python -m scripts.generate_openclaw_schema --check
-node --test tests/test_openclaw_plugin.mjs
-bash scripts/start.sh
-```
-
-本机服务默认监听 `127.0.0.1:8000`。手机通过固定中转连接；Harness 的 MCP 工具在同一电脑直接调用本机服务。旧 OpenClaw 接口保留，可按文档单独配置。
-
-[Cloudflare 使用说明](docs/cloudflare.md) · [固定中转](docs/relay.md) · [API 与备份](docs/deployment.md) · [安卓构建](docs/android.md) · [OpenClaw 旧接入](docs/openclaw.md) · [验证记录](docs/validation.md)
-
-项目已验证后端、Windows 独立程序、安卓构建与模拟器界面、中转/MCP 和可选 HITA 数据写入。个人 Cloudflare 部署、实际微信／QQ账号及手机通知仍需在各自设备上验收。

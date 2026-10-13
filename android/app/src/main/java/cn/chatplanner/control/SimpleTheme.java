@@ -86,6 +86,7 @@ final class SimpleTheme {
     b.setAllCaps(false);
     b.setTextSize(14);
     b.setElevation(0);
+    b.setStateListAnimator(null);
     b.setPadding(dp(a, 12), dp(a, 8), dp(a, 12), dp(a, 8));
     b.setMinHeight(dp(a, 46));
     b.setMinimumHeight(dp(a, 46));

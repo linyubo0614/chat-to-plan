@@ -44,6 +44,7 @@ public final class ChatActivity extends Activity {
     SimpleTheme.gap(this, root, 8);
     scroll = new ScrollView(this);
     scroll.setFillViewport(true);
+    scroll.setVerticalScrollBarEnabled(false);
     scroll.setClipToPadding(false);
     messages = SimpleTheme.column(this);
     messages.setPadding(0, SimpleTheme.dp(this, 8), 0, SimpleTheme.dp(this, 16));
@@ -78,6 +79,7 @@ public final class ChatActivity extends Activity {
         android.text.InputType.TYPE_CLASS_TEXT
             | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
             | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+    input.setMaxLines(5);
     composer.addView(input, new LinearLayout.LayoutParams(-1, -2));
     LinearLayout actions = SimpleTheme.row(this);
     SimpleTheme.weight(actions, SimpleTheme.text(this, "DeepSeek", 12, SimpleTheme.MUTED, false));
@@ -162,13 +164,13 @@ public final class ChatActivity extends Activity {
     }
     String pending = pendingStage();
     if (!pending.isEmpty() && !pending.equals("confirmation")) {
-      Toast.makeText(this, "请先重试或取消上一项待处理操作，输入内容会保留。", Toast.LENGTH_LONG).show();
+      input.setError("请先重试或取消上一项待处理操作，输入内容会保留。");
       return;
     }
     if (pending.equals("confirmation")
         && !java.util.Arrays.asList("确认", "确认删除", "是", "yes", "取消", "不删除", "否", "no")
             .contains(text.toLowerCase(java.util.Locale.ROOT))) {
-      Toast.makeText(this, "请先确认或取消上一次删除，输入内容会保留。", Toast.LENGTH_LONG).show();
+      input.setError("请先确认或取消上一次删除，输入内容会保留。");
       return;
     }
     boolean configured;
@@ -209,7 +211,9 @@ public final class ChatActivity extends Activity {
           SimpleTheme.dp(this, 58),
           SimpleTheme.dp(this, 12),
           SimpleTheme.dp(this, 32));
-      empty.addView(SimpleTheme.text(this, "✦", 38, SimpleTheme.BLUE, false));
+      TextView mark = SimpleTheme.text(this, "✦", 38, SimpleTheme.BLUE, false);
+      mark.setGravity(Gravity.CENTER);
+      empty.addView(mark);
       SimpleTheme.gap(this, empty, 18);
       TextView title = SimpleTheme.text(this, "今天有什么需要记住？", 23, SimpleTheme.INK, true);
       title.setGravity(Gravity.CENTER);
@@ -257,7 +261,7 @@ public final class ChatActivity extends Activity {
       block.addView(content);
       JSONObject result = m.optJSONObject("result");
       if (result != null) renderResult(block, result, i == history.length() - 1);
-      LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
+      LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(user ? -2 : -1, -2);
       if (user) bp.setMarginStart(SimpleTheme.dp(this, 42));
       line.addView(block, bp);
       messages.addView(line);

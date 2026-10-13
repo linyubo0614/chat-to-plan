@@ -8,6 +8,7 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
 import android.os.SystemClock;
@@ -206,6 +207,32 @@ public final class LocalPlannerUiInstrumentedTest extends InstrumentationTestCas
     }
   }
 
+  private void assertVisible(View view, String message) throws Exception {
+    assertVisible(view, message, 32, 32);
+  }
+
+  private void assertVisible(View view, String message, int minWidthDp, int minHeightDp)
+      throws Exception {
+    final boolean[] visible = {false};
+    float density = view.getResources().getDisplayMetrics().density;
+    long deadline = SystemClock.elapsedRealtime() + 3000;
+    do {
+      getInstrumentation()
+          .runOnMainSync(
+              () -> {
+                Rect bounds = new Rect();
+                visible[0] =
+                    view.isShown()
+                        && view.getGlobalVisibleRect(bounds)
+                        && bounds.width() >= Math.round(minWidthDp * density)
+                        && bounds.height() >= Math.round(minHeightDp * density);
+              });
+      if (visible[0]) break;
+      SystemClock.sleep(50);
+    } while (SystemClock.elapsedRealtime() < deadline);
+    assertTrue(message, visible[0]);
+  }
+
   public void testLauncherIsConversationAndScreenCanBeCaptured() throws Exception {
     Intent launcher =
         context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
@@ -231,6 +258,7 @@ public final class LocalPlannerUiInstrumentedTest extends InstrumentationTestCas
     assertEquals(original, store.getValue("composer_draft"));
     assertEquals(0, store.messages().length());
     assertFalse(ChatRuntime.get(context).busy());
+    assertVisible(send, "Long pasted text must not push the send button off screen");
 
     for (String stage : new String[] {"request", "unknown", "confirmation"}) {
       store.putValue(
@@ -271,6 +299,9 @@ public final class LocalPlannerUiInstrumentedTest extends InstrumentationTestCas
     ChatActivity chat = launch(ChatActivity.class);
     Button edit = button(decor(chat), "查看 / 编辑");
     assertNotNull("Local engine receipts must expose their editor", edit);
+    assertVisible(edit, "The saved result card must be visible in the conversation", 80, 32);
+    assertVisible(
+        chat.findViewById(R.id.chat_send), "The composer must remain visible below results");
     screenshot(chat, "chat-result");
     Instrumentation.ActivityMonitor monitor =
         getInstrumentation().addMonitor(PlannerActivity.class.getName(), null, false);
@@ -426,6 +457,7 @@ public final class LocalPlannerUiInstrumentedTest extends InstrumentationTestCas
         launch(
             PlannerActivity.class,
             new Intent(context, PlannerActivity.class).putExtra("page", "memos"));
+    click(button(decor(memos), "校园生活"));
     assertTrue(hasText(decor(memos), "图书馆开放时间"));
     screenshot(memos, "memos");
     MainActivity settings = launch(MainActivity.class);
